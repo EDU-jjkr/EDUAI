@@ -1,0 +1,6 @@
+{}
+Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at C:\Users\sumit\Sumit-Personal\EDU\backend\node_modules\pg-pool\index.js:45:11
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async query (C:\Users\sumit\Sumit-Personal\EDU\backend\src\config\database.ts:19:17)
+    at async runMigration (C:\Users\sumit\Sumit-Personal\EDU\backend\scripts\run_migration.ts:20:5)
