@@ -6,7 +6,14 @@ import { AppError } from '../middleware/error-handler'
 import type { AuthRequest } from '../middleware/auth'
 import { logEvent } from '../services/analytics.service'
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL
+const AI_SERVICE_TIMEOUT = parseInt(process.env.AI_SERVICE_TIMEOUT || '15000', 10)
+
+// Create centralized axios client - DO NOT HARDCODE localhost!
+const aiClient = AI_SERVICE_URL ? axios.create({
+  baseURL: AI_SERVICE_URL,
+  timeout: AI_SERVICE_TIMEOUT
+}) : null
 
 export const generateDeck = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

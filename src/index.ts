@@ -19,6 +19,8 @@ import exportRoutes from './routes/export.routes'
 import passwordResetRoutes from './routes/password-reset.routes'
 import bulkImportRoutes from './routes/bulk-import.routes'
 import curriculumRoutes from './routes/curriculum.routes'
+import aiRoutes from './routes/ai.routes'
+import { checkAiHealth } from './services/ai.service'
 import { verifyKeycloakToken, KeycloakAuthRequest } from './middleware/keycloak-auth'
 
 const app: Application = express()
@@ -61,6 +63,14 @@ app.use('/api/admin/users', bulkImportRoutes)
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/export', exportRoutes)
 app.use('/api/curriculum', curriculumRoutes)
+app.use('/api/ai', aiRoutes)
+
+// Internal AI health check
+app.get('/internal/ai-health', async (req, res) => {
+  const isUp = await checkAiHealth()
+  if (isUp) res.json({ ai: 'up' })
+  else res.status(503).json({ ai: 'down' })
+})
 
 // 404 handler
 app.use((req: Request, res: Response) => {
