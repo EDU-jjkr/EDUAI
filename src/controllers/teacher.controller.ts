@@ -7,7 +7,7 @@ import type { AuthRequest } from '../middleware/auth'
 import { logEvent } from '../services/analytics.service'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL
-const AI_SERVICE_TIMEOUT = parseInt(process.env.AI_SERVICE_TIMEOUT || '15000', 10)
+const AI_SERVICE_TIMEOUT = parseInt(process.env.AI_SERVICE_TIMEOUT || '120000', 10) // 2 minutes for AI generation
 
 // Create centralized axios client - DO NOT HARDCODE localhost!
 const aiClient = AI_SERVICE_URL ? axios.create({
@@ -53,15 +53,36 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       }
     }
 
+    // Validate AI service is configured
+    if (!AI_SERVICE_URL) {
+      throw new AppError(
+        'AI service is not configured. Please contact administrator.',
+        500,
+        'AI_SERVICE_NOT_CONFIGURED'
+      )
+    }
+
     // Call AI service with structured prompt for topics
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-deck`, {
-      topics: topicsArray,
-      subject,
-      gradeLevel,
-      chapter,
-      numSlides,
-      structuredFormat: true, // Signal to use new structured format
-    })
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-deck`, {
+        topics: topicsArray,
+        subject,
+        gradeLevel,
+        chapter,
+        numSlides,
+        structuredFormat: true, // Signal to use new structured format
+      }, {
+        timeout: AI_SERVICE_TIMEOUT
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service temporarily unavailable. Please try again later.',
+        503,
+        'AI_SERVICE_ERROR'
+      )
+    }
 
     const { title, slides } = aiResponse.data
 
@@ -273,13 +294,34 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-activity`, {
-      topic,
-      subject,
-      duration,
-      activityType,
-      gradeLevel,
-    })
+    // Validate AI service is configured
+    if (!AI_SERVICE_URL) {
+      throw new AppError(
+        'AI service is not configured. Please contact administrator.',
+        500,
+        'AI_SERVICE_NOT_CONFIGURED'
+      )
+    }
+
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-activity`, {
+        topic,
+        subject,
+        duration,
+        activityType,
+        gradeLevel,
+      }, {
+        timeout: AI_SERVICE_TIMEOUT
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service temporarily unavailable. Please try again later.',
+        503,
+        'AI_SERVICE_ERROR'
+      )
+    }
 
     const activity = aiResponse.data
 
@@ -428,12 +470,33 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
       }
     }
 
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-lesson-plan`, {
-      topics,
-      subject,
-      gradeLevel,
-      totalDuration,
-    })
+    // Validate AI service is configured
+    if (!AI_SERVICE_URL) {
+      throw new AppError(
+        'AI service is not configured. Please contact administrator.',
+        500,
+        'AI_SERVICE_NOT_CONFIGURED'
+      )
+    }
+
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-lesson-plan`, {
+        topics,
+        subject,
+        gradeLevel,
+        totalDuration,
+      }, {
+        timeout: AI_SERVICE_TIMEOUT
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service temporarily unavailable. Please try again later.',
+        503,
+        'AI_SERVICE_ERROR'
+      )
+    }
 
     const lessonPlan = aiResponse.data
 
