@@ -22,17 +22,23 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topic, subject, gradeLevel, numSlides = 10, forceRegenerate = false } = req.body
+    const { topics, subject, gradeLevel, chapter, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
-    // 1. Check for existing deck (Smart Caching)
+    // Validate topics is an array
+    const topicsArray = Array.isArray(topics) ? topics : [topics]
+
+    // Calculate number of slides: 5 per topic + 1 summary
+    // Per topic: Definition, Details, Basic Q, Hard Q, Olympiad Q
+    const numSlides = topicsArray.length * 5 + 1
+
+    // 1. Check for existing deck (Smart Caching) - match by chapter and topics
     if (!forceRegenerate) {
-      // Simple heuristic: match topic title roughly
-      // Ideally we would have a 'topic_original_query' column, but filtering title by ILIKE is a decent proxy
+      const topicsKey = topicsArray.sort().join(',')
       const existingDeck = await query(
         'SELECT * FROM decks WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND title ILIKE $4 ORDER BY created_at DESC LIMIT 1',
-        [userId, subject, gradeLevel, `%${topic}%`]
+        [userId, subject, gradeLevel, `%${chapter}%`]
       )
 
       if (existingDeck.rows.length > 0) {
@@ -47,12 +53,14 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       }
     }
 
-    // Call AI service
+    // Call AI service with structured prompt for topics
     const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-deck`, {
-      topic,
+      topics: topicsArray,
       subject,
       gradeLevel,
+      chapter,
       numSlides,
+      structuredFormat: true, // Signal to use new structured format
     })
 
     const { title, slides } = aiResponse.data
@@ -65,32 +73,24 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
 
     const deck = deckResult.rows[0]
 
-    // Save slides with visual metadata (if present)
+    // Save slides
     for (const slide of slides) {
-      const visualMetadata = slide.visualMetadata || {}
-
       await query(
-        `INSERT INTO slides (
-          deck_id, title, content, slide_order,
-          visual_type, visual_config, visual_confidence, generated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO slides (deck_id, title, content, slide_order) VALUES ($1, $2, $3, $4)`,
         [
           deck.id,
           slide.title,
           slide.content,
-          slide.order,
-          visualMetadata.visualType || null,
-          visualMetadata.visualConfig ? JSON.stringify(visualMetadata.visualConfig) : null,
-          visualMetadata.confidence || null,
-          visualMetadata.generatedBy || null
+          slide.order
         ]
       )
     }
 
     await logEvent(userId, schoolId, 'teacher_generate_deck', {
-      topic,
+      topics: topicsArray,
       subject,
       gradeLevel,
+      chapter,
       numSlides,
     })
 
@@ -107,10 +107,17 @@ export const getDecks = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    const result = await query(
-      'SELECT * FROM decks WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
-      [userId, schoolId]
-    )
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query(
+        'SELECT * FROM decks WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+        [userId, schoolId]
+      )
+      : await query(
+        'SELECT * FROM decks WHERE created_by = $1 AND school_id IS NULL ORDER BY created_at DESC',
+        [userId]
+      )
     res.json(result.rows)
   } catch (error) {
     next(error)
@@ -121,7 +128,10 @@ export const getDeckById = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const { id } = req.params
     const schoolId = req.user!.school_id || null
-    const result = await query('SELECT * FROM decks WHERE id = $1 AND school_id = $2', [id, schoolId])
+    const result = await query(
+      'SELECT * FROM decks WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
+      [id, schoolId]
+    )
 
     if (result.rows.length === 0) {
       throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
@@ -172,7 +182,10 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
     const schoolId = req.user!.school_id || null
 
     // 1. Fetch current deck
-    const deckResult = await query('SELECT * FROM decks WHERE id = $1 AND school_id = $2', [id, schoolId])
+    const deckResult = await query(
+      'SELECT * FROM decks WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
+      [id, schoolId]
+    )
     if (deckResult.rows.length === 0) {
       throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
     }
@@ -192,12 +205,22 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
       slides: currentSlides
     }
 
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/modify-deck`, {
-      currentDeck: fullDeckContext,
-      feedback,
-      subject: currentDeck.subject,
-      gradeLevel: currentDeck.grade_level
-    })
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/modify-deck`, {
+        currentDeck: fullDeckContext,
+        feedback,
+        subject: currentDeck.subject,
+        gradeLevel: currentDeck.grade_level
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service failed to modify deck',
+        500,
+        'AI_SERVICE_ERROR'
+      )
+    }
 
     const { title: newTitle, slides: newSlides } = aiResponse.data
 
@@ -208,23 +231,15 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
     // Delete old slides
     await query('DELETE FROM slides WHERE deck_id = $1', [id])
 
-    // Insert new slides
+    // Insert new slides (basic columns only - visual metadata columns may not exist in DB)
     for (const slide of newSlides) {
-      const visualMetadata = slide.visualMetadata || {}
       await query(
-        `INSERT INTO slides (
-          deck_id, title, content, slide_order,
-          visual_type, visual_config, visual_confidence, generated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO slides (deck_id, title, content, slide_order) VALUES ($1, $2, $3, $4)`,
         [
           id,
           slide.title,
           slide.content,
-          slide.order,
-          visualMetadata.visualType || null,
-          visualMetadata.visualConfig ? JSON.stringify(visualMetadata.visualConfig) : null,
-          visualMetadata.confidence || null,
-          visualMetadata.generatedBy || null
+          slide.order
         ]
       )
     }
@@ -326,10 +341,17 @@ export const getActivities = async (req: AuthRequest, res: Response, next: NextF
   try {
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    const result = await query(
-      'SELECT * FROM activities WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
-      [userId, schoolId]
-    )
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query(
+        'SELECT * FROM activities WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+        [userId, schoolId]
+      )
+      : await query(
+        'SELECT * FROM activities WHERE created_by = $1 AND school_id IS NULL ORDER BY created_at DESC',
+        [userId]
+      )
     res.json(result.rows)
   } catch (error) {
     next(error)
@@ -445,14 +467,77 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
   }
 }
 
+export const generateCurriculumPlan = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { gradeLevel, subject, chapter } = req.body
+    const userId = req.user!.id
+    const schoolId = req.user!.school_id || null
+
+    // Import curriculum helper (inline to avoid circular deps)
+    const { getChaptersBySubject } = await import('../services/curriculum')
+
+    // Fetch curriculum data for this class/subject
+    const allChapters = getChaptersBySubject(parseInt(gradeLevel), subject)
+
+    if (!allChapters || allChapters.length === 0) {
+      return res.status(404).json({
+        message: `No curriculum found for Class ${gradeLevel} ${subject}`
+      })
+    }
+
+    // If chapter is specified, filter to just that chapter
+    let chaptersToSend = allChapters
+    if (chapter) {
+      const selectedChapter = allChapters.find((c: any) => c.name === chapter)
+      if (!selectedChapter) {
+        return res.status(404).json({
+          message: `Chapter "${chapter}" not found in Class ${gradeLevel} ${subject}`
+        })
+      }
+      chaptersToSend = [selectedChapter]
+    }
+
+    // Call AI service with curriculum data
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-curriculum-plan`, {
+      gradeLevel,
+      subject,
+      chapter: chapter || null,
+      chapters: chaptersToSend
+    })
+
+    await logEvent(userId, schoolId, 'teacher_generate_curriculum_plan', {
+      subject,
+      gradeLevel,
+      chapter: chapter || 'all',
+      chaptersCount: chaptersToSend.length
+    })
+
+    res.json(aiResponse.data)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const getLessonPlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    const result = await query(
-      'SELECT * FROM lesson_plans WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
-      [userId, schoolId]
-    )
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query(
+        'SELECT * FROM lesson_plans WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+        [userId, schoolId]
+      )
+      : await query(
+        'SELECT * FROM lesson_plans WHERE created_by = $1 AND school_id IS NULL ORDER BY created_at DESC',
+        [userId]
+      )
     res.json(result.rows)
   } catch (error) {
     next(error)
@@ -463,13 +548,90 @@ export const getLessonPlanById = async (req: AuthRequest, res: Response, next: N
   try {
     const { id } = req.params
     const schoolId = req.user!.school_id || null
-    const result = await query('SELECT * FROM lesson_plans WHERE id = $1 AND school_id = $2', [id, schoolId])
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query('SELECT * FROM lesson_plans WHERE id = $1 AND school_id = $2', [id, schoolId])
+      : await query('SELECT * FROM lesson_plans WHERE id = $1 AND school_id IS NULL', [id])
 
     if (result.rows.length === 0) {
       throw new AppError('Lesson plan not found', 404, 'LESSON_PLAN_NOT_FOUND')
     }
 
     res.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const deleteLessonPlan = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const schoolId = req.user!.school_id || null
+
+    const deleteQuery = schoolId
+      ? 'DELETE FROM lesson_plans WHERE id = $1 AND school_id = $2'
+      : 'DELETE FROM lesson_plans WHERE id = $1 AND school_id IS NULL'
+
+    await query(deleteQuery, schoolId ? [id, schoolId] : [id])
+    res.json({ message: 'Lesson plan deleted successfully' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Question Sets - saved question papers
+export const getQuestionSets = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id
+    const schoolId = req.user!.school_id || null
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query(
+        'SELECT * FROM question_sets WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+        [userId, schoolId]
+      )
+      : await query(
+        'SELECT * FROM question_sets WHERE created_by = $1 AND school_id IS NULL ORDER BY created_at DESC',
+        [userId]
+      )
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getQuestionSetById = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const schoolId = req.user!.school_id || null
+
+    const result = schoolId
+      ? await query('SELECT * FROM question_sets WHERE id = $1 AND school_id = $2', [id, schoolId])
+      : await query('SELECT * FROM question_sets WHERE id = $1 AND school_id IS NULL', [id])
+
+    if (result.rows.length === 0) {
+      throw new AppError('Question set not found', 404, 'QUESTION_SET_NOT_FOUND')
+    }
+
+    res.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const deleteQuestionSet = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const schoolId = req.user!.school_id || null
+
+    const deleteQuery = schoolId
+      ? 'DELETE FROM question_sets WHERE id = $1 AND school_id = $2'
+      : 'DELETE FROM question_sets WHERE id = $1 AND school_id IS NULL'
+
+    await query(deleteQuery, schoolId ? [id, schoolId] : [id])
+    res.json({ message: 'Question set deleted successfully' })
   } catch (error) {
     next(error)
   }
@@ -584,3 +746,242 @@ export const searchConcepts = async (req: AuthRequest, res: Response, next: Next
     next(error)
   }
 }
+
+// ============================================
+// TOPIC GENERATOR (Replica of Deck Generator)
+// ============================================
+
+export const generateTopic = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { topic, subject, gradeLevel, classDuration = 40, forceRegenerate = false } = req.body
+    const userId = req.user!.id
+    const schoolId = req.user!.school_id || null
+
+    // Calculate number of items based on class duration
+    const numSlides = Math.max(5, Math.min(20, Math.ceil(classDuration / 4)))
+
+    // 1. Check for existing topic (Smart Caching)
+    if (!forceRegenerate) {
+      const existingTopic = await query(
+        'SELECT * FROM topics WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND title ILIKE $4 ORDER BY created_at DESC LIMIT 1',
+        [userId, subject, gradeLevel, `%${topic}%`]
+      )
+
+      if (existingTopic.rows.length > 0) {
+        const topicData = existingTopic.rows[0]
+        const itemsResult = await query('SELECT * FROM topic_items WHERE topic_id = $1 ORDER BY item_order', [topicData.id])
+
+        return res.json({
+          ...topicData,
+          slides: itemsResult.rows
+        })
+      }
+    }
+
+    // Call AI service
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-topic`, {
+      topic,
+      subject,
+      gradeLevel,
+      numSlides,
+      classDuration,
+      includeExamples: true,
+      includeQuestions: true,
+    })
+
+    const { title, slides } = aiResponse.data
+
+    // Save to database
+    const topicResult = await query(
+      'INSERT INTO topics (title, subject, grade_level, created_by, school_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, subject, gradeLevel, userId, schoolId]
+    )
+
+    const topicData = topicResult.rows[0]
+
+    // Save items
+    for (const slide of slides) {
+      await query(
+        `INSERT INTO topic_items (topic_id, title, content, item_order) VALUES ($1, $2, $3, $4)`,
+        [
+          topicData.id,
+          slide.title,
+          slide.content,
+          slide.order
+        ]
+      )
+    }
+
+    await logEvent(userId, schoolId, 'teacher_generate_topic', {
+      topic,
+      subject,
+      gradeLevel,
+      classDuration,
+      numSlides,
+    })
+
+    res.json({
+      ...topicData,
+      slides,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getTopics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id
+    const schoolId = req.user!.school_id || null
+    const result = await query(
+      'SELECT * FROM topics WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+      [userId, schoolId]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getTopicById = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const schoolId = req.user!.school_id || null
+    const result = await query(
+      'SELECT * FROM topics WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
+      [id, schoolId]
+    )
+
+    if (result.rows.length === 0) {
+      throw new AppError('Topic not found', 404, 'TOPIC_NOT_FOUND')
+    }
+
+    const itemsResult = await query(
+      'SELECT * FROM topic_items WHERE topic_id = $1 ORDER BY item_order',
+      [id]
+    )
+
+    res.json({
+      ...result.rows[0],
+      slides: itemsResult.rows,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateTopic = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const { title, slides } = req.body
+    const schoolId = req.user!.school_id || null
+
+    await query('UPDATE topics SET title = $1, updated_at = NOW() WHERE id = $2 AND school_id = $3', [title, id, schoolId])
+
+    if (slides) {
+      for (const slide of slides) {
+        await query(
+          'UPDATE topic_items SET title = $1, content = $2 WHERE id = $3',
+          [slide.title, slide.content, slide.id]
+        )
+      }
+    }
+
+    res.json({ message: 'Topic updated successfully' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateTopicWithAI = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const { feedback } = req.body
+    const userId = req.user!.id
+    const schoolId = req.user!.school_id || null
+
+    // 1. Fetch current topic
+    const topicResult = await query(
+      'SELECT * FROM topics WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
+      [id, schoolId]
+    )
+    if (topicResult.rows.length === 0) {
+      throw new AppError('Topic not found', 404, 'TOPIC_NOT_FOUND')
+    }
+    const currentTopic = topicResult.rows[0]
+
+    // 2. Fetch current items
+    const itemsResult = await query('SELECT * FROM topic_items WHERE topic_id = $1 ORDER BY item_order', [id])
+    const currentSlides = itemsResult.rows.map(s => ({
+      title: s.title,
+      content: s.content,
+      order: s.item_order
+    }))
+
+    // 3. Call AI to modify
+    const fullTopicContext = {
+      title: currentTopic.title,
+      slides: currentSlides
+    }
+
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/modify-topic`, {
+        currentDeck: fullTopicContext,
+        feedback,
+        subject: currentTopic.subject,
+        gradeLevel: currentTopic.grade_level
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service failed to modify topic',
+        500,
+        'AI_SERVICE_ERROR'
+      )
+    }
+
+    const { title: newTitle, slides: newSlides } = aiResponse.data
+
+    // 4. Overwrite in DB
+    await query('UPDATE topics SET title = $1, updated_at = NOW() WHERE id = $2', [newTitle, id])
+
+    // Delete old items
+    await query('DELETE FROM topic_items WHERE topic_id = $1', [id])
+
+    // Insert new items
+    for (const slide of newSlides) {
+      await query(
+        `INSERT INTO topic_items (topic_id, title, content, item_order) VALUES ($1, $2, $3, $4)`,
+        [
+          id,
+          slide.title,
+          slide.content,
+          slide.order
+        ]
+      )
+    }
+
+    res.json({ message: 'Topic updated with AI successfully' })
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const deleteTopic = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const schoolId = req.user!.school_id || null
+    await query('DELETE FROM topics WHERE id = $1 AND school_id = $2', [id, schoolId])
+    res.json({ message: 'Topic deleted successfully' })
+  } catch (error) {
+    next(error)
+  }
+}
+

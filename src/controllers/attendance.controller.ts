@@ -55,10 +55,8 @@ export const markAttendance = async (req: AuthRequest, res: Response, next: Next
         }
 
         // Validate date is not in future
-        const attendanceDate = new Date(date)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        if (attendanceDate > today) {
+        const today = new Date().toISOString().split('T')[0]
+        if (date > today) {
             throw new AppError('Cannot mark attendance for future dates', 400, 'FUTURE_DATE')
         }
 
@@ -236,6 +234,7 @@ export const getDetailedAttendance = async (req: AuthRequest, res: Response, nex
             total: result.rows.length,
             presentCount: presentStudents.length,
             absentCount: absentStudents.length,
+            records: result.rows,  // Add this for frontend
             presentStudents,
             absentStudents
         })

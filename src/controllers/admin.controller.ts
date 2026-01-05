@@ -387,3 +387,164 @@ export const getTeacherContent = async (req: AuthRequest, res: Response, next: N
   }
 }
 
+// Delete teacher content (lesson plan or deck)
+export const deleteTeacherContent = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contentType, id } = req.params
+
+    if (contentType === 'lesson_plan') {
+      await query('DELETE FROM lesson_plans WHERE id = $1', [id])
+    } else if (contentType === 'deck') {
+      // Delete slides first (foreign key constraint)
+      await query('DELETE FROM slides WHERE deck_id = $1', [id])
+      await query('DELETE FROM decks WHERE id = $1', [id])
+    } else {
+      throw new AppError('Invalid content type', 400, 'INVALID_CONTENT_TYPE')
+    }
+
+    res.json({
+      message: 'Content deleted successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Assign teacher to class
+export const assignClassTeacher = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { classId, teacherId } = req.body
+
+    if (!classId || !teacherId) {
+      throw new AppError('Class ID and Teacher ID are required', 400, 'MISSING_FIELDS')
+    }
+
+    // Verify teacher exists and is a teacher
+    const teacherCheck = await query(
+      'SELECT id, role FROM users WHERE id = $1',
+      [teacherId]
+    )
+
+    if (teacherCheck.rows.length === 0) {
+      throw new AppError('Teacher not found', 404, 'TEACHER_NOT_FOUND')
+    }
+
+    if (teacherCheck.rows[0].role !== 'teacher') {
+      throw new AppError('User is not a teacher', 400, 'NOT_A_TEACHER')
+    }
+
+    // Parse classId to get grade_level and section
+    // classId format: "grade_level-section" or "grade_level-default"
+    const [gradeLevel, sectionPart] = classId.split('-')
+    const section = sectionPart === 'default' ? null : sectionPart
+
+    // Update teacher's class assignment
+    await query(
+      `UPDATE users 
+       SET class_teacher_of = $1, assigned_section = $2
+       WHERE id = $3 AND role = 'teacher'`,
+      [gradeLevel, section, teacherId]
+    )
+
+    res.json({
+      message: 'Class teacher assigned successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Get classes (for admin to manage)
+export const getClasses = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const schoolId = req.user!.school_id
+
+    // Get unique combinations of grade_level and section from students
+    const result = await query(
+      `SELECT DISTINCT 
+        grade_level,
+        section,
+        CONCAT(grade_level, COALESCE(' - ' || section, '')) as name,
+        grade_level || '-' || COALESCE(section, 'default') as id
+       FROM users
+       WHERE role = 'student' 
+       AND (school_id = $1 OR (school_id IS NULL AND $1 IS NULL))
+       AND grade_level IS NOT NULL
+       ORDER BY grade_level, section`,
+      [schoolId]
+    )
+
+    // For each class, check if there's an assigned teacher
+    const classes = await Promise.all(result.rows.map(async (row) => {
+      // Try to find a teacher assigned to this grade_level and section
+      const teacherResult = await query(
+        `SELECT id, name FROM users 
+         WHERE role = 'teacher' 
+         AND class_teacher_of = $1 
+         AND (assigned_section = $2 OR (assigned_section IS NULL AND $2 IS NULL))
+         AND (school_id = $3 OR (school_id IS NULL AND $3 IS NULL))
+         LIMIT 1`,
+        [row.grade_level, row.section, schoolId]
+      )
+
+      return {
+        id: row.id,
+        name: row.name,
+        grade_level: row.grade_level,
+        section: row.section,
+        class_teacher_id: teacherResult.rows[0]?.id || null,
+        class_teacher_name: teacherResult.rows[0]?.name || null
+      }
+    }))
+
+    res.json(classes)
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Create class
+export const createClass = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { name, grade_level, section } = req.body
+    const schoolId = req.user!.school_id
+
+    if (!name || !grade_level) {
+      throw new AppError('Name and grade level are required', 400, 'MISSING_FIELDS')
+    }
+
+    const result = await query(
+      `INSERT INTO classes (school_id, name, grade_level, section)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [schoolId, name, grade_level, section || null]
+    )
+
+    res.status(201).json({
+      message: 'Class created successfully',
+      class: result.rows[0]
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+// Get minimal analytics summary for dashboard overview
+export const getAnalyticsSummary = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userCountResult = await query('SELECT COUNT(*) as total FROM users')
+    const deckCountResult = await query('SELECT COUNT(*) as total FROM decks')
+    const activityCountResult = await query('SELECT COUNT(*) as total FROM activities')
+
+    res.json({
+      totalUsers: parseInt(userCountResult.rows[0].total),
+      activeUsers: parseInt(userCountResult.rows[0].total), // Placeholder: same as total
+      totalDecks: parseInt(deckCountResult.rows[0].total),
+      totalActivities: parseInt(activityCountResult.rows[0].total),
+      totalDoubts: 0, // Restricted
+      aiCostTotal: 0, // Restricted
+      aiCostThisMonth: 0, // Restricted
+    })
+  } catch (error) {
+    next(error)
+  }
+}

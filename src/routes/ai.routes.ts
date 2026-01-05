@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import { aiGenerate, checkAiHealth } from '../services/ai.service'
-import { verifyKeycloakToken } from '../middleware/keycloak-auth'
+import { authenticate } from '../middleware/auth'
 import axios from 'axios'
 
 const router = Router()
 
 // Protected route for AI generation
-router.post('/generate', verifyKeycloakToken, async (req, res) => {
+router.post('/generate', authenticate, async (req, res) => {
     try {
         const result = await aiGenerate(req.body)
         res.json(result)

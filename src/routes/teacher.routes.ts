@@ -14,10 +14,10 @@ router.use(authorize('teacher', 'admin'))
 router.post(
   '/deck/generate',
   [
-    body('topic').trim().notEmpty(),
+    body('topics').isArray({ min: 1 }).withMessage('At least one topic is required'),
     body('subject').trim().notEmpty(),
     body('gradeLevel').trim().notEmpty(),
-    body('numSlides').optional().isInt({ min: 5, max: 20 }),
+    body('chapter').optional().trim(),
   ],
   teacherController.generateDeck
 )
@@ -57,10 +57,25 @@ router.post(
   teacherController.generateLessonPlan
 )
 
+// Curriculum Plan Generation (auto-fetch topics from curriculum)
+router.post(
+  '/curriculum-plan/generate',
+  [
+    body('gradeLevel').trim().notEmpty(),
+    body('subject').trim().notEmpty(),
+  ],
+  teacherController.generateCurriculumPlan
+)
 
 router.get('/lesson-plans', teacherController.getLessonPlans)
 router.get('/lesson-plan/:id', teacherController.getLessonPlanById)
+router.delete('/lesson-plan/:id', teacherController.deleteLessonPlan)
 router.post('/lesson-plan/:id/ai-update', teacherController.updateLessonPlanWithAI)
+
+// Question Sets (saved question papers)
+router.get('/question-sets', teacherController.getQuestionSets)
+router.get('/question-set/:id', teacherController.getQuestionSetById)
+router.delete('/question-set/:id', teacherController.deleteQuestionSet)
 
 // Update Deck AI
 router.post('/deck/:id/ai-update', teacherController.updateDeckWithAI)
@@ -69,5 +84,23 @@ router.post('/deck/:id/ai-update', teacherController.updateDeckWithAI)
 router.get('/concept-library', teacherController.getConceptLibrary)
 router.get('/concept/:id', teacherController.getConceptById)
 router.post('/concept/search', teacherController.searchConcepts)
+
+// Topic Generation (Replica of Deck Generation)
+router.post(
+  '/topic/generate',
+  [
+    body('topic').trim().notEmpty(),
+    body('subject').trim().notEmpty(),
+    body('gradeLevel').trim().notEmpty(),
+    body('numSlides').optional().isInt({ min: 5, max: 20 }),
+  ],
+  teacherController.generateTopic
+)
+
+router.get('/topics', teacherController.getTopics)
+router.get('/topic/:id', teacherController.getTopicById)
+router.put('/topic/:id', teacherController.updateTopic)
+router.delete('/topic/:id', teacherController.deleteTopic)
+router.post('/topic/:id/ai-update', teacherController.updateTopicWithAI)
 
 export default router

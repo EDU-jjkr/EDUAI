@@ -1,0 +1,98 @@
+-- Add this at the end of admin.controller.ts
+
+// Assign teacher to class
+export const assignClassTeacher = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { classId, teacherId } = req.body
+
+    if (!classId || !teacherId) {
+      throw new AppError('Class ID and Teacher ID are required', 400, 'MISSING_FIELDS')
+    }
+
+    // Verify teacher exists and is a teacher
+    const teacherCheck = await query(
+      'SELECT id, role FROM users WHERE id = $1',
+      [teacherId]
+    )
+
+    if (teacherCheck.rows.length === 0) {
+      throw new AppError('Teacher not found', 404, 'TEACHER_NOT_FOUND')
+    }
+
+    if (teacherCheck.rows[0].role !== 'teacher') {
+      throw new AppError('User is not a teacher', 400, 'NOT_A_TEACHER')
+    }
+
+    // Update class with teacher
+    const result = await query(
+      `UPDATE classes 
+       SET class_teacher_id = $1 
+       WHERE id = $2 
+       RETURNING *`,
+      [teacherId, classId]
+    )
+
+    if (result.rows.length === 0) {
+      throw new AppError('Class not found', 404, 'CLASS_NOT_FOUND')
+    }
+
+    // Update teacher's assigned_class_id
+    await query(
+      'UPDATE users SET assigned_class_id = $1 WHERE id = $2',
+      [classId, teacherId]
+    )
+
+    res.json({
+      message: 'Class teacher assigned successfully',
+      class: result.rows[0]
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Get classes (for admin to manage)
+export const getClasses = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const schoolId = req.user!.school_id
+
+    const result = await query(
+      `SELECT c.*, u.name as class_teacher_name
+       FROM classes c
+       LEFT JOIN users u ON c.class_teacher_id = u.id
+       WHERE c.school_id = $1
+       ORDER BY c.name, c.section`,
+      [schoolId]
+    )
+
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Create class
+export const createClass = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { name, grade_level, section } = req.body
+    const schoolId = req.user!.school_id
+
+    if (!name || !grade_level) {
+      throw new AppError('Name and grade level are required', 400, 'MISSING_FIELDS')
+    }
+
+    const result = await query(
+      `INSERT INTO classes (school_id, name, grade_level, section)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [schoolId, name, grade_level, section || null]
+    )
+
+    res.status(201).json({
+      message: 'Class created successfully',
+      class: result.rows[0]
+    })
+  } catch (error) {
+    next(error)
+  }
+}
