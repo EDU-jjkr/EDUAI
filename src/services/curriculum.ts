@@ -154,6 +154,237 @@ const class9Curriculum: ClassCurriculum = {
                 { name: 'Waste Generation and Management', topics: [{ name: 'Types of Waste' }, { name: 'Waste Disposal Methods' }] },
             ]
         },
+        {
+            name: 'English',
+            chapters: [
+                {
+                    name: 'Paper 1: Language',
+                    topics: [
+                        { name: 'Composition: Narrative, Descriptive, Argumentative' },
+                        { name: 'Short Story and Picture Composition' },
+                        { name: 'Letter Writing: Formal and Informal' },
+                        { name: 'Notice and Email Writing' },
+                        { name: 'Unseen Passage Comprehension' },
+                        { name: 'Grammar: Prepositions and Tenses' },
+                        { name: 'Conditional Sentences' },
+                        { name: 'Active and Passive Voice' },
+                        { name: 'Direct and Indirect Speech' }
+                    ]
+                },
+                {
+                    name: 'Paper 2: Julius Caesar (Acts I & II)',
+                    topics: [
+                        { name: 'Character Introduction' },
+                        { name: 'The Conspiracy' },
+                        { name: 'Ides of March Warnings' }
+                    ]
+                },
+                {
+                    name: 'Treasure Chest - Prose',
+                    topics: [
+                        { name: 'Bonku Babu\'s Friend' },
+                        { name: 'Oliver Asks for More' },
+                        { name: 'The Model Millionaire' },
+                        { name: 'Home-coming' },
+                        { name: 'The Boy Who Broke the Bank' }
+                    ]
+                },
+                {
+                    name: 'Treasure Chest - Poetry',
+                    topics: [
+                        { name: 'The Night Mail' },
+                        { name: 'Skimbleshanks: The Railway Cat' },
+                        { name: 'I Remember, I Remember' },
+                        { name: 'A Doctor\'s Journal Entry' },
+                        { name: 'A Work of Artifice' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'History & Civics',
+            chapters: [
+                {
+                    name: 'Civics: Our Constitution',
+                    topics: [
+                        { name: 'Definition and Preamble' },
+                        { name: 'Date of Enforcement' },
+                        { name: 'Single Citizenship' },
+                        { name: 'Universal Adult Franchise' },
+                        { name: 'Fundamental Rights and Duties' },
+                        { name: 'Directive Principles of State Policy' }
+                    ]
+                },
+                {
+                    name: 'Civics: Elections',
+                    topics: [
+                        { name: 'Election Commission: Composition' },
+                        { name: 'Election Commission: Functions' }
+                    ]
+                },
+                {
+                    name: 'Civics: Local Self-Government',
+                    topics: [
+                        { name: 'Rural: Panchayati Raj' },
+                        { name: 'Urban: Municipalities and Corporations' }
+                    ]
+                },
+                {
+                    name: 'History: The Harappan Civilisation',
+                    topics: [
+                        { name: 'Sources: Great Bath and Seals' },
+                        { name: 'Urban Planning' },
+                        { name: 'Trade' },
+                        { name: 'Decline' }
+                    ]
+                },
+                {
+                    name: 'History: The Vedic Period',
+                    topics: [
+                        { name: 'Early vs Later Vedic: Society' },
+                        { name: 'Early vs Later Vedic: Religion' },
+                        { name: 'Early vs Later Vedic: Economy' }
+                    ]
+                },
+                {
+                    name: 'History: Jainism and Buddhism',
+                    topics: [
+                        { name: 'Causes for Rise' },
+                        { name: 'Mahavira\'s Teachings' },
+                        { name: 'Buddha\'s Teachings' }
+                    ]
+                },
+                {
+                    name: 'History: The Mauryan Empire',
+                    topics: [
+                        { name: 'Chandragupta Maurya' },
+                        { name: 'Ashoka\'s Dhamma' },
+                        { name: 'Kalinga War' },
+                        { name: 'Administration' }
+                    ]
+                },
+                {
+                    name: 'History: The Sangam Age',
+                    topics: [
+                        { name: 'Sources: Tirukkural' },
+                        { name: 'Society' },
+                        { name: 'Economy' }
+                    ]
+                },
+                {
+                    name: 'History: The Age of the Guptas',
+                    topics: [
+                        { name: 'Sources' },
+                        { name: 'Scientific Progress' },
+                        { name: 'Cultural Progress: Golden Age' }
+                    ]
+                },
+                {
+                    name: 'History: Medieval India',
+                    topics: [
+                        { name: 'The Cholas: Local Self-Government' },
+                        { name: 'Delhi Sultanate: Qutub Minar' },
+                        { name: 'Mughal Empire: Akbar\'s Administration' },
+                        { name: 'Composite Culture: Bhakti and Sufi Movements' }
+                    ]
+                },
+                {
+                    name: 'History: The Modern Age',
+                    topics: [
+                        { name: 'Renaissance: Art and Literature' },
+                        { name: 'Reformation' },
+                        { name: 'Industrial Revolution' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'Geography',
+            chapters: [
+                {
+                    name: 'Earth as a Planet',
+                    topics: [
+                        { name: 'Shape of Earth' },
+                        { name: 'Earth as Home of Humankind' }
+                    ]
+                },
+                {
+                    name: 'Geographic Grid',
+                    topics: [
+                        { name: 'Latitudes' },
+                        { name: 'Longitudes' },
+                        { name: 'International Date Line' },
+                        { name: 'Time Calculations' }
+                    ]
+                },
+                {
+                    name: 'Motions of the Earth',
+                    topics: [
+                        { name: 'Rotation: Day and Night' },
+                        { name: 'Revolution: Seasons' },
+                        { name: 'Solstices and Equinoxes' }
+                    ]
+                },
+                {
+                    name: 'Structure of the Earth',
+                    topics: [
+                        { name: 'Crust, Mantle, Core' },
+                        { name: 'Rock Cycle: Igneous, Sedimentary, Metamorphic' }
+                    ]
+                },
+                {
+                    name: 'Volcanoes and Earthquakes',
+                    topics: [
+                        { name: 'Types and Causes' },
+                        { name: 'Distribution: Ring of Fire' },
+                        { name: 'Effects' }
+                    ]
+                },
+                {
+                    name: 'Atmosphere',
+                    topics: [
+                        { name: 'Composition' },
+                        { name: 'Structure: Troposphere to Exosphere' },
+                        { name: 'Greenhouse Effect' }
+                    ]
+                },
+                {
+                    name: 'Insolation and Pressure',
+                    topics: [
+                        { name: 'Heating of Atmosphere' },
+                        { name: 'Pressure Belts' },
+                        { name: 'Planetary Winds' }
+                    ]
+                },
+                {
+                    name: 'Humidity and Precipitation',
+                    topics: [
+                        { name: 'Types of Rainfall: Relief' },
+                        { name: 'Types of Rainfall: Convectional' },
+                        { name: 'Types of Rainfall: Cyclonic' }
+                    ]
+                },
+                {
+                    name: 'Pollution',
+                    topics: [
+                        { name: 'Air Pollution' },
+                        { name: 'Water Pollution' },
+                        { name: 'Soil Pollution' },
+                        { name: 'Radiation and Noise Pollution' }
+                    ]
+                },
+                {
+                    name: 'Natural Regions',
+                    topics: [
+                        { name: 'Equatorial Region' },
+                        { name: 'Tropical Monsoon' },
+                        { name: 'Desert' },
+                        { name: 'Mediterranean' },
+                        { name: 'Tundra' }
+                    ]
+                },
+            ]
+        },
     ]
 };
 
@@ -220,6 +451,255 @@ const class10Curriculum: ClassCurriculum = {
                 { name: 'Human Anatomy and Physiology', topics: [{ name: 'Circulatory System' }, { name: 'Excretory System' }, { name: 'Nervous System' }, { name: 'Endocrine System' }] },
                 { name: 'Reproduction', topics: [{ name: 'Reproductive System' }, { name: 'Menstrual Cycle' }, { name: 'Fertilisation' }, { name: 'Population Control' }] },
                 { name: 'Pollution', topics: [{ name: 'Air, Water, Soil Pollution' }, { name: 'Effects and Control' }] },
+            ]
+        },
+        {
+            name: 'English',
+            chapters: [
+                {
+                    name: 'Paper 1: Language (Advanced)',
+                    topics: [
+                        { name: 'Composition: Higher Difficulty' },
+                        { name: 'Advanced Grammar Transformations' }
+                    ]
+                },
+                {
+                    name: 'Paper 2: Julius Caesar (Acts III, IV & V)',
+                    topics: [
+                        { name: 'The Assassination' },
+                        { name: 'Funeral Speeches' },
+                        { name: 'War and Deaths of Brutus and Cassius' }
+                    ]
+                },
+                {
+                    name: 'Treasure Chest - Prose',
+                    topics: [
+                        { name: 'With the Photographer' },
+                        { name: 'The Elevator' },
+                        { name: 'The Girl Who Can' },
+                        { name: 'The Pedestrian' },
+                        { name: 'The Last Lesson' }
+                    ]
+                },
+                {
+                    name: 'Treasure Chest - Poetry',
+                    topics: [
+                        { name: 'Haunted Houses' },
+                        { name: 'The Glove and the Lions' },
+                        { name: 'When Great Trees Fall' },
+                        { name: 'A Considerable Speck' },
+                        { name: 'The Power of Music' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'History & Civics',
+            chapters: [
+                {
+                    name: 'Civics: Union Legislature',
+                    topics: [
+                        { name: 'Lok Sabha: Composition and Qualifications' },
+                        { name: 'Rajya Sabha: Composition and Qualifications' },
+                        { name: 'Powers of Parliament' },
+                        { name: 'Role of Speaker' }
+                    ]
+                },
+                {
+                    name: 'Civics: Union Executive',
+                    topics: [
+                        { name: 'President: Powers and Election' },
+                        { name: 'Vice-President' },
+                        { name: 'Prime Minister and Council of Ministers' },
+                        { name: 'Collective Responsibility' }
+                    ]
+                },
+                {
+                    name: 'Civics: The Judiciary',
+                    topics: [
+                        { name: 'Supreme Court: Jurisdiction' },
+                        { name: 'Writs' },
+                        { name: 'High Courts' },
+                        { name: 'Subordinate Courts' }
+                    ]
+                },
+                {
+                    name: 'History: First War of Independence 1857',
+                    topics: [
+                        { name: 'Causes: Political, Social, Military' },
+                        { name: 'Consequences' }
+                    ]
+                },
+                {
+                    name: 'History: Rise of Nationalism',
+                    topics: [
+                        { name: 'Early Nationalists: Methods and Contributions' },
+                        { name: 'Assertive Nationalists' },
+                        { name: 'Partition of Bengal' },
+                        { name: 'Surat Split' }
+                    ]
+                },
+                {
+                    name: 'History: Gandhian Era',
+                    topics: [
+                        { name: 'Non-Cooperation Movement' },
+                        { name: 'Khilafat Movement' },
+                        { name: 'Civil Disobedience: Dandi March' },
+                        { name: 'Quit India Movement' }
+                    ]
+                },
+                {
+                    name: 'History: Forward Bloc and INA',
+                    topics: [
+                        { name: 'Subhas Chandra Bose' }
+                    ]
+                },
+                {
+                    name: 'History: Independence',
+                    topics: [
+                        { name: 'Mountbatten Plan' },
+                        { name: 'Partition' }
+                    ]
+                },
+                {
+                    name: 'World History: World Wars',
+                    topics: [
+                        { name: 'WWI: Causes' },
+                        { name: 'Treaty of Versailles' },
+                        { name: 'WWII: Causes and Consequences' }
+                    ]
+                },
+                {
+                    name: 'World History: Dictatorships',
+                    topics: [
+                        { name: 'Fascism: Mussolini' },
+                        { name: 'Nazism: Hitler' }
+                    ]
+                },
+                {
+                    name: 'World History: United Nations',
+                    topics: [
+                        { name: 'Objectives' },
+                        { name: 'Organs: General Assembly, Security Council, ICJ' },
+                        { name: 'Agencies: UNICEF, WHO, UNESCO' }
+                    ]
+                },
+                {
+                    name: 'World History: Non-Aligned Movement',
+                    topics: [
+                        { name: 'Panchsheel' },
+                        { name: 'Architects: Nehru, Tito, Nasser' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'Geography',
+            chapters: [
+                {
+                    name: 'Map Work',
+                    topics: [
+                        { name: 'Interpretation of Topographical Maps' },
+                        { name: 'Grid Reference, Scale, Symbols' },
+                        { name: 'Map of India: Physical Features' }
+                    ]
+                },
+                {
+                    name: 'Location and Extent of India',
+                    topics: [
+                        { name: 'India: Neighbors' },
+                        { name: 'Standard Meridian' }
+                    ]
+                },
+                {
+                    name: 'Climate of India',
+                    topics: [
+                        { name: 'Monsoons: SW and NE' },
+                        { name: 'Rainfall Distribution' },
+                        { name: 'Western Disturbances' }
+                    ]
+                },
+                {
+                    name: 'Soil Resources',
+                    topics: [
+                        { name: 'Alluvial Soil' },
+                        { name: 'Black Soil' },
+                        { name: 'Red Soil' },
+                        { name: 'Laterite Soil' }
+                    ]
+                },
+                {
+                    name: 'Natural Vegetation',
+                    topics: [
+                        { name: 'Tropical Evergreen' },
+                        { name: 'Deciduous' },
+                        { name: 'Desert' },
+                        { name: 'Tidal Forests' }
+                    ]
+                },
+                {
+                    name: 'Water Resources',
+                    topics: [
+                        { name: 'Irrigation: Canal, Well, Tank' },
+                        { name: 'Rainwater Harvesting' }
+                    ]
+                },
+                {
+                    name: 'Minerals',
+                    topics: [
+                        { name: 'Iron Ore' },
+                        { name: 'Manganese' },
+                        { name: 'Bauxite' },
+                        { name: 'Copper' }
+                    ]
+                },
+                {
+                    name: 'Energy Resources',
+                    topics: [
+                        { name: 'Coal' },
+                        { name: 'Petroleum' },
+                        { name: 'Natural Gas' },
+                        { name: 'Hydel Power' },
+                        { name: 'Non-conventional: Solar, Wind' }
+                    ]
+                },
+                {
+                    name: 'Agriculture',
+                    topics: [
+                        { name: 'Rice' },
+                        { name: 'Wheat' },
+                        { name: 'Millets and Pulses' },
+                        { name: 'Sugarcane' },
+                        { name: 'Cotton and Jute' },
+                        { name: 'Tea and Coffee' }
+                    ]
+                },
+                {
+                    name: 'Industries',
+                    topics: [
+                        { name: 'Iron and Steel: Tata Steel, Rourkela' },
+                        { name: 'Cotton Textile' },
+                        { name: 'Petrochemical' },
+                        { name: 'Electronics and Software Parks' }
+                    ]
+                },
+                {
+                    name: 'Transport',
+                    topics: [
+                        { name: 'Railways' },
+                        { name: 'Roadways: Golden Quadrilateral' },
+                        { name: 'Airways' },
+                        { name: 'Waterways' }
+                    ]
+                },
+                {
+                    name: 'Waste Management',
+                    topics: [
+                        { name: 'Impact of Waste Accumulation' },
+                        { name: 'Need for Management' },
+                        { name: 'Methods: Segregation, Composting' }
+                    ]
+                },
             ]
         },
     ]
@@ -311,6 +791,198 @@ const class11Curriculum: ClassCurriculum = {
                 { name: 'Chemical Coordination', topics: [{ name: 'Endocrine Glands' }, { name: 'Hormones' }] },
             ]
         },
+        {
+            name: 'English',
+            chapters: [
+                {
+                    name: 'Paper 1: Composition (400-450 words)',
+                    topics: [
+                        { name: 'Reflective Essay' },
+                        { name: 'Argumentative Essay' },
+                        { name: 'Descriptive Essay' }
+                    ]
+                },
+                {
+                    name: 'Paper 1: Directed Writing',
+                    topics: [
+                        { name: 'Article Writing' },
+                        { name: 'Book and Film Review' },
+                        { name: 'Speech Writing' },
+                        { name: 'Statement of Purpose (SOP)' }
+                    ]
+                },
+                {
+                    name: 'Paper 1: Proposal Writing',
+                    topics: [
+                        { name: 'Introduction and Objectives' },
+                        { name: 'Methods' }
+                    ]
+                },
+                {
+                    name: 'Paper 1: Grammar',
+                    topics: [
+                        { name: 'Transformation of Sentences' },
+                        { name: 'Phrasal Verbs' }
+                    ]
+                },
+                {
+                    name: 'Paper 2: Macbeth (Acts I & II)',
+                    topics: [
+                        { name: 'The Witches and the Prophecy' },
+                        { name: 'Lady Macbeth\'s Ambition' },
+                        { name: 'Duncan\'s Murder' }
+                    ]
+                },
+                {
+                    name: 'Prism - Prose',
+                    topics: [
+                        { name: 'A Living God' },
+                        { name: 'Advice to Youth' },
+                        { name: 'The Paper Menagerie' },
+                        { name: 'The Great Automatic Grammatizator' },
+                        { name: 'Thank You, Ma\'am' }
+                    ]
+                },
+                {
+                    name: 'Rhapsody - Poetry',
+                    topics: [
+                        { name: 'Abhisara: The Tryst' },
+                        { name: 'Why I Like the Hospital' },
+                        { name: 'Sonnet 116' },
+                        { name: 'Death of a Naturalist' },
+                        { name: 'Strange Meeting' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'History',
+            chapters: [
+                {
+                    name: 'Indian History: Growth of Nationalism',
+                    topics: [
+                        { name: 'Swadeshi Movement' },
+                        { name: 'Revolutionary Nationalism' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Colonial Economy',
+                    topics: [
+                        { name: 'Railways' },
+                        { name: 'De-industrialization' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Social and Religious Movements',
+                    topics: [
+                        { name: 'Brahmo Samaj' },
+                        { name: 'Arya Samaj' },
+                        { name: 'Aligarh Movement' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Gandhian Nationalism',
+                    topics: [
+                        { name: '1916-1934: Champaran to Civil Disobedience' }
+                    ]
+                },
+                {
+                    name: 'World History: World War I',
+                    topics: [
+                        { name: 'Causes of WWI' },
+                        { name: 'Trench Warfare' },
+                        { name: 'Treaty of Versailles' }
+                    ]
+                },
+                {
+                    name: 'World History: Rise of Communism',
+                    topics: [
+                        { name: 'Russian Revolution 1917' },
+                        { name: 'Lenin' },
+                        { name: 'Stalin' }
+                    ]
+                },
+                {
+                    name: 'World History: Rise of Fascism and Nazism',
+                    topics: [
+                        { name: 'Italy: Mussolini' },
+                        { name: 'Germany: Hitler' }
+                    ]
+                },
+                {
+                    name: 'World History: Rise of Militarism',
+                    topics: [
+                        { name: 'Japan: Manchuria Invasion' }
+                    ]
+                },
+                {
+                    name: 'World History: The Great Depression',
+                    topics: [
+                        { name: '1929 Crash' },
+                        { name: 'Impact on USA and Europe' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'Geography',
+            chapters: [
+                {
+                    name: 'Physical Geography: Origin of Earth',
+                    topics: [
+                        { name: 'Big Bang Theory' },
+                        { name: 'Nebular Hypothesis' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Interior of Earth',
+                    topics: [
+                        { name: 'Crust, Mantle, Core' },
+                        { name: 'Seismic Waves' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Plate Tectonics',
+                    topics: [
+                        { name: 'Continental Drift' },
+                        { name: 'Plate Boundaries' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Volcanoes and Earthquakes',
+                    topics: [
+                        { name: 'Landforms' },
+                        { name: 'Distribution' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Atmosphere',
+                    topics: [
+                        { name: 'Insolation' },
+                        { name: 'Heat Budget' },
+                        { name: 'Pressure Belts' },
+                        { name: 'General Circulation' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Hydrosphere',
+                    topics: [
+                        { name: 'Ocean Bottom Relief' },
+                        { name: 'Salinity' },
+                        { name: 'Tides' },
+                        { name: 'Currents' }
+                    ]
+                },
+                {
+                    name: 'Physical Geography: Biosphere',
+                    topics: [
+                        { name: 'Ecosystems' },
+                        { name: 'Biodiversity Loss' },
+                        { name: 'Conservation' }
+                    ]
+                },
+            ]
+        },
     ]
 };
 
@@ -393,6 +1065,190 @@ const class12Curriculum: ClassCurriculum = {
                 { name: 'Ecosystem', topics: [{ name: 'Energy Flow' }, { name: 'Ecological Pyramids' }, { name: 'Nutrient Cycling' }] },
                 { name: 'Biodiversity and Conservation', topics: [{ name: 'Biodiversity' }, { name: 'Conservation Strategies' }] },
                 { name: 'Environmental Issues', topics: [{ name: 'Pollution' }, { name: 'Global Warming' }, { name: 'Waste Management' }] },
+            ]
+        },
+        {
+            name: 'English',
+            chapters: [
+                {
+                    name: 'Paper 1: Advanced Composition',
+                    topics: [
+                        { name: 'Precision in Proposal Writing' },
+                        { name: 'Advanced Directed Writing' }
+                    ]
+                },
+                {
+                    name: 'Paper 2: Macbeth (Acts III, IV & V)',
+                    topics: [
+                        { name: 'Banquo\'s Murder' },
+                        { name: 'Banquet Scene' },
+                        { name: 'Macduff\'s Revenge' },
+                        { name: 'Downfall of Macbeth' }
+                    ]
+                },
+                {
+                    name: 'Prism - Prose',
+                    topics: [
+                        { name: 'Atithi / Guest' },
+                        { name: 'The Cookie Lady' },
+                        { name: 'There Will Come Soft Rains' },
+                        { name: 'Indigo' },
+                        { name: 'The Medicine Bag' }
+                    ]
+                },
+                {
+                    name: 'Rhapsody - Poetry',
+                    topics: [
+                        { name: 'Telephone Conversation' },
+                        { name: 'Tithonus' },
+                        { name: 'Beethoven' },
+                        { name: 'Small Towns and the River' },
+                        { name: 'Death be not Proud' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'History',
+            chapters: [
+                {
+                    name: 'Indian History: Towards Independence',
+                    topics: [
+                        { name: 'INA' },
+                        { name: 'Cabinet Mission' },
+                        { name: 'Partition: 1939-1947' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Establishment of Democracy',
+                    topics: [
+                        { name: 'Sardar Patel: Integration' },
+                        { name: 'Linguistic States' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Development of Democracy',
+                    topics: [
+                        { name: 'Emergency: 1975-77' },
+                        { name: 'J.P. Movement' },
+                        { name: 'Rise of Janata Party' }
+                    ]
+                },
+                {
+                    name: 'Indian History: Foreign Policy',
+                    topics: [
+                        { name: 'NAM' },
+                        { name: 'Pakistan Wars: 1948, 65, 71' },
+                        { name: 'Sino-Indian War: 1962' }
+                    ]
+                },
+                {
+                    name: 'World History: World War II',
+                    topics: [
+                        { name: 'Causes' },
+                        { name: 'Pearl Harbor' },
+                        { name: 'Holocaust' },
+                        { name: 'Atomic Bomb' }
+                    ]
+                },
+                {
+                    name: 'World History: De-colonisation',
+                    topics: [
+                        { name: 'Kenya: Mau Mau' },
+                        { name: 'Ghana: Nkrumah' }
+                    ]
+                },
+                {
+                    name: 'World History: Cold War',
+                    topics: [
+                        { name: 'Truman Doctrine' },
+                        { name: 'Korean War' },
+                        { name: 'Cuban Missile Crisis' },
+                        { name: 'Vietnam War' },
+                        { name: 'Collapse of USSR' }
+                    ]
+                },
+                {
+                    name: 'World History: Protest Movements',
+                    topics: [
+                        { name: 'Civil Rights: MLK Jr' },
+                        { name: 'Anti-Apartheid: Mandela' },
+                        { name: 'Feminist Movement' }
+                    ]
+                },
+                {
+                    name: 'World History: Middle East',
+                    topics: [
+                        { name: 'Arab-Israeli Conflict: 1948' },
+                        { name: 'Suez Crisis' },
+                        { name: 'Camp David' }
+                    ]
+                },
+            ]
+        },
+        {
+            name: 'Geography',
+            chapters: [
+                {
+                    name: 'India: Population',
+                    topics: [
+                        { name: 'Distribution' },
+                        { name: 'Density' },
+                        { name: 'Growth' },
+                        { name: 'Migration Trends' }
+                    ]
+                },
+                {
+                    name: 'India: Human Settlements',
+                    topics: [
+                        { name: 'Rural: Types' },
+                        { name: 'Urban: Functional Classification' }
+                    ]
+                },
+                {
+                    name: 'India: Resources',
+                    topics: [
+                        { name: 'Land Use' },
+                        { name: 'Water Scarcity and Conservation' },
+                        { name: 'Mineral Belts' }
+                    ]
+                },
+                {
+                    name: 'India: Agriculture',
+                    topics: [
+                        { name: 'Green Revolution Problems' },
+                        { name: 'Dryland Farming' }
+                    ]
+                },
+                {
+                    name: 'India: Industries',
+                    topics: [
+                        { name: 'Location Factors' },
+                        { name: 'Liberalisation Effect' },
+                        { name: 'Industrial Regions: Mumbai-Pune' }
+                    ]
+                },
+                {
+                    name: 'India: Transport',
+                    topics: [
+                        { name: 'Modes and Significance' }
+                    ]
+                },
+                {
+                    name: 'India: Regional Development',
+                    topics: [
+                        { name: 'Chhattisgarh Minerals' },
+                        { name: 'Bengaluru Electronics' }
+                    ]
+                },
+                {
+                    name: 'Practical Work',
+                    topics: [
+                        { name: 'Surveying: Plane Table' },
+                        { name: 'Map Projections' },
+                        { name: 'Remote Sensing and GIS Basics' }
+                    ]
+                },
             ]
         },
     ]
