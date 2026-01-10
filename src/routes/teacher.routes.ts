@@ -22,6 +22,7 @@ router.post(
   teacherController.generateDeck
 )
 
+router.post('/deck/generate', teacherController.generateDeck)
 router.get('/decks', teacherController.getDecks)
 router.get('/deck/:id', teacherController.getDeckById)
 router.put('/deck/:id', teacherController.updateDeck)

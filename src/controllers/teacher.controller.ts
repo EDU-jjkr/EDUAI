@@ -128,7 +128,6 @@ export const getDecks = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-
     // Handle NULL school_id properly
     const result = schoolId
       ? await query(
