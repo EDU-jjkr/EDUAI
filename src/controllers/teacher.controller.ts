@@ -33,12 +33,11 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
     // Per topic: Definition, Details, Basic Q, Hard Q, Olympiad Q
     const numSlides = topicsArray.length * 5 + 1
 
-    // 1. Check for existing deck (Smart Caching) - match by chapter and topics
-    if (!forceRegenerate) {
-      const topicsKey = topicsArray.sort().join(',')
+    // 1. Check for existing deck (Smart Caching) - match by source_chapter
+    if (!forceRegenerate && chapter) {
       const existingDeck = await query(
-        'SELECT * FROM decks WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND title ILIKE $4 ORDER BY created_at DESC LIMIT 1',
-        [userId, subject, gradeLevel, `%${chapter}%`]
+        'SELECT * FROM decks WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_chapter = $4 ORDER BY created_at DESC LIMIT 1',
+        [userId, subject, gradeLevel, chapter]
       )
 
       if (existingDeck.rows.length > 0) {
@@ -86,10 +85,10 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
 
     const { title, slides } = aiResponse.data
 
-    // Save to database
+    // Save to database with source tracking
     const deckResult = await query(
-      'INSERT INTO decks (title, subject, grade_level, created_by, school_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title, subject, gradeLevel, userId, schoolId]
+      'INSERT INTO decks (title, subject, grade_level, created_by, school_id, source_topics, source_chapter) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [title, subject, gradeLevel, userId, schoolId, topicsArray, chapter]
     )
 
     const deck = deckResult.rows[0]
@@ -289,9 +288,45 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topic, subject, duration, activityType, gradeLevel } = req.body
+    const { topic, subject, duration, activityType, gradeLevel, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
+
+    // Smart Caching: Check for existing activity
+    if (!forceRegenerate) {
+      const existingActivity = await query(
+        'SELECT * FROM activities WHERE created_by = $1 AND subject = $2 AND activity_type = $3 AND source_topic = $4 ORDER BY created_at DESC LIMIT 1',
+        [userId, subject, activityType, topic]
+      )
+
+      if (existingActivity.rows.length > 0) {
+        const dbActivity = existingActivity.rows[0]
+
+        // Safe JSON parse
+        const parseJsonField = (field: any) => {
+          if (typeof field === 'string') {
+            try {
+              return JSON.parse(field)
+            } catch (e) {
+              return []
+            }
+          }
+          return Array.isArray(field) ? field : []
+        }
+
+        const formattedActivity = {
+          title: dbActivity.title,
+          description: parseJsonField(dbActivity.learning_outcomes)?.[0] || `Activity for ${topic}`,
+          instructions: parseJsonField(dbActivity.steps),
+          materials: parseJsonField(dbActivity.materials),
+          duration: `${dbActivity.duration} minutes`,
+          subject: dbActivity.subject,
+          gradeLevel: gradeLevel,
+        }
+
+        return res.json(formattedActivity)
+      }
+    }
 
     // Validate AI service is configured
     if (!AI_SERVICE_URL) {
@@ -304,7 +339,7 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
 
     let aiResponse
     try {
-      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-activity`, {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/activity/generate-activity`, {
         topic,
         subject,
         duration,
@@ -325,7 +360,7 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
     const activity = aiResponse.data
 
     const result = await query(
-      'INSERT INTO activities (title, subject, activity_type, duration, materials, steps, learning_outcomes, created_by, school_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      'INSERT INTO activities (title, subject, activity_type, duration, materials, steps, learning_outcomes, created_by, school_id, source_topic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
       [
         activity.title,
         subject,
@@ -336,6 +371,7 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
         JSON.stringify(activity.learningOutcomes),
         userId,
         schoolId,
+        topic,
       ]
     )
 
@@ -454,13 +490,12 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
-    // Smart Caching: Check for existing lesson plan with matching subject/grade/topics
+    // Smart Caching: Check for existing lesson plan with matching source_topics
     if (!forceRegenerate) {
-      // For single topic, do a simple title match
-      const primaryTopic = Array.isArray(topics) ? topics[0] : topics
+      const topicsArray = Array.isArray(topics) ? topics : [topics]
       const existingPlan = await query(
-        'SELECT * FROM lesson_plans WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND title ILIKE $4 ORDER BY created_at DESC LIMIT 1',
-        [userId, subject, gradeLevel, `%${primaryTopic}%`]
+        'SELECT * FROM lesson_plans WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_topics = $4 ORDER BY created_at DESC LIMIT 1',
+        [userId, subject, gradeLevel, topicsArray]
       )
 
       if (existingPlan.rows.length > 0) {
@@ -480,7 +515,7 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
 
     let aiResponse
     try {
-      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-lesson-plan`, {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/lesson-plan/generate-lesson-plan`, {
         topics,
         subject,
         gradeLevel,
@@ -499,8 +534,9 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
 
     const lessonPlan = aiResponse.data
 
+    const topicsArray = Array.isArray(topics) ? topics : [topics]
     const result = await query(
-      'INSERT INTO lesson_plans (title, subject, grade_level, duration, objectives, concepts, sequence, assessments, resources, created_by, school_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+      'INSERT INTO lesson_plans (title, subject, grade_level, duration, objectives, concepts, sequence, assessments, resources, created_by, school_id, source_topics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
       [
         lessonPlan.title,
         subject,
@@ -513,6 +549,7 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
         JSON.stringify(lessonPlan.resources),
         userId,
         schoolId,
+        topicsArray,
       ]
     )
 
@@ -565,7 +602,7 @@ export const generateCurriculumPlan = async (req: AuthRequest, res: Response, ne
     }
 
     // Call AI service with curriculum data
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-curriculum-plan`, {
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/lesson-plan/generate-curriculum-plan`, {
       gradeLevel,
       subject,
       chapter: chapter || null,
@@ -827,11 +864,11 @@ export const generateTopic = async (req: AuthRequest, res: Response, next: NextF
     // Calculate number of items based on class duration
     const numSlides = Math.max(5, Math.min(20, Math.ceil(classDuration / 4)))
 
-    // 1. Check for existing topic (Smart Caching)
+    // 1. Check for existing topic (Smart Caching) - match by source_topic
     if (!forceRegenerate) {
       const existingTopic = await query(
-        'SELECT * FROM topics WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND title ILIKE $4 ORDER BY created_at DESC LIMIT 1',
-        [userId, subject, gradeLevel, `%${topic}%`]
+        'SELECT * FROM topics WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_topic = $4 ORDER BY created_at DESC LIMIT 1',
+        [userId, subject, gradeLevel, topic]
       )
 
       if (existingTopic.rows.length > 0) {
@@ -846,22 +883,20 @@ export const generateTopic = async (req: AuthRequest, res: Response, next: NextF
     }
 
     // Call AI service
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/generate-topic`, {
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/topic/generate-topic`, {
       topic,
       subject,
       gradeLevel,
       numSlides,
       classDuration,
-      includeExamples: true,
-      includeQuestions: true,
     })
 
     const { title, slides } = aiResponse.data
 
-    // Save to database
+    // Save to database with source tracking
     const topicResult = await query(
-      'INSERT INTO topics (title, subject, grade_level, created_by, school_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title, subject, gradeLevel, userId, schoolId]
+      'INSERT INTO topics (title, subject, grade_level, created_by, school_id, source_topic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [title, subject, gradeLevel, userId, schoolId, topic]
     )
 
     const topicData = topicResult.rows[0]
@@ -900,10 +935,17 @@ export const getTopics = async (req: AuthRequest, res: Response, next: NextFunct
   try {
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    const result = await query(
-      'SELECT * FROM topics WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
-      [userId, schoolId]
-    )
+
+    // Handle NULL school_id properly
+    const result = schoolId
+      ? await query(
+        'SELECT * FROM topics WHERE created_by = $1 AND school_id = $2 ORDER BY created_at DESC',
+        [userId, schoolId]
+      )
+      : await query(
+        'SELECT * FROM topics WHERE created_by = $1 AND school_id IS NULL ORDER BY created_at DESC',
+        [userId]
+      )
     res.json(result.rows)
   } catch (error) {
     next(error)
