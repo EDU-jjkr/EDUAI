@@ -64,7 +64,7 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
     // Call AI service with structured prompt for topics
     let aiResponse
     try {
-      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/deck/generate-deck`, {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/deck/generate-complete`, {
         topics: topicsArray,
         subject,
         gradeLevel,
