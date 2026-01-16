@@ -10,19 +10,26 @@ router.use(authenticate)
 router.use(authorize('teacher', 'admin'))
 // Note: School context not required for personal teacher tools like deck generation
 
-// Deck Generation
+// Deck Generation - Support both new (topics array) and legacy (single topic) formats
 router.post(
   '/deck/generate',
   [
-    body('topics').isArray({ min: 1 }).withMessage('At least one topic is required'),
-    body('subject').trim().notEmpty(),
-    body('gradeLevel').trim().notEmpty(),
+    body('topics').optional().isArray({ min: 1 }).withMessage('Topics must be an array with at least one item'),
+    body('topic').optional().isString().trim().withMessage('Topic must be a non-empty string'),
+    body('subject').trim().notEmpty().withMessage('Subject is required'),
+    body('gradeLevel').trim().notEmpty().withMessage('Grade level is required'),
     body('chapter').optional().trim(),
+    // Custom validation to ensure at least one of topics or topic exists
+    body().custom((value, { req }) => {
+      if (!req.body.topics && !req.body.topic) {
+        throw new Error('Either topics array or topic is required')
+      }
+      return true
+    })
   ],
   teacherController.generateDeck
 )
 
-router.post('/deck/generate', teacherController.generateDeck)
 router.get('/decks', teacherController.getDecks)
 router.get('/deck/:id', teacherController.getDeckById)
 router.put('/deck/:id', teacherController.updateDeck)

@@ -19,22 +19,38 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
+      console.error('Validation errors:', JSON.stringify(errors.array(), null, 2))
+      console.error('Request body:', JSON.stringify(req.body, null, 2))
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topics, subject, gradeLevel, chapter, forceRegenerate = false } = req.body
+    const { topics, topic, subject, gradeLevel, chapter, level, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
+    // Handle both formats: topics array (new) or single topic (legacy)
     // Validate topics is an array
-    const topicsArray = Array.isArray(topics) ? topics : [topics]
+    const topicsArray = topics && Array.isArray(topics)
+      ? topics
+      : topic
+        ? [topic]  // Convert single topic to array
+        : []
+
+    if (topicsArray.length === 0) {
+      return res.status(400).json({
+        message: 'Either topics array or topic is required'
+      })
+    }
 
     // Calculate number of slides: 5 per topic + 1 summary
     // Per topic: Definition, Details, Basic Q, Hard Q, Olympiad Q
     const numSlides = topicsArray.length * 5 + 1
 
     // 1. Check for existing deck (Smart Caching) - match by source_chapter
-    if (!forceRegenerate && chapter) {
+    // Skip caching for differentiated levels (SUPPORT, EXTENSION) - only cache CORE
+    const shouldUseCache = !forceRegenerate && chapter && (!level || level === 'CORE')
+
+    if (shouldUseCache) {
       const existingDeck = await query(
         'SELECT * FROM decks WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_chapter = $4 ORDER BY created_at DESC LIMIT 1',
         [userId, subject, gradeLevel, chapter]
@@ -70,6 +86,7 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
         gradeLevel,
         chapter,
         numSlides,
+        level: level || 'CORE', // Pass differentiation level (SUPPORT, CORE, EXTENSION)
         structuredFormat: true, // Signal to use new structured format
       }, {
         timeout: AI_SERVICE_TIMEOUT
@@ -82,6 +99,9 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
         'AI_SERVICE_ERROR'
       )
     }
+
+    // Debug: Log the full response to see what we're getting
+    console.log('AI Response received:', JSON.stringify(aiResponse.data, null, 2))
 
     const { title, slides } = aiResponse.data
 
