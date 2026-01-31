@@ -308,45 +308,9 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topic, subject, duration, activityType, gradeLevel, forceRegenerate = false } = req.body
+    const { classLevel, subject, chapter, topic, count = 5 } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-
-    // Smart Caching: Check for existing activity
-    if (!forceRegenerate) {
-      const existingActivity = await query(
-        'SELECT * FROM activities WHERE created_by = $1 AND subject = $2 AND activity_type = $3 AND source_topic = $4 ORDER BY created_at DESC LIMIT 1',
-        [userId, subject, activityType, topic]
-      )
-
-      if (existingActivity.rows.length > 0) {
-        const dbActivity = existingActivity.rows[0]
-
-        // Safe JSON parse
-        const parseJsonField = (field: any) => {
-          if (typeof field === 'string') {
-            try {
-              return JSON.parse(field)
-            } catch (e) {
-              return []
-            }
-          }
-          return Array.isArray(field) ? field : []
-        }
-
-        const formattedActivity = {
-          title: dbActivity.title,
-          description: parseJsonField(dbActivity.learning_outcomes)?.[0] || `Activity for ${topic}`,
-          instructions: parseJsonField(dbActivity.steps),
-          materials: parseJsonField(dbActivity.materials),
-          duration: `${dbActivity.duration} minutes`,
-          subject: dbActivity.subject,
-          gradeLevel: gradeLevel,
-        }
-
-        return res.json(formattedActivity)
-      }
-    }
 
     // Validate AI service is configured
     if (!AI_SERVICE_URL) {
@@ -360,11 +324,11 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
     let aiResponse
     try {
       aiResponse = await axios.post(`${AI_SERVICE_URL}/api/activity/generate-activity`, {
-        topic,
+        classLevel,
         subject,
-        duration,
-        activityType,
-        gradeLevel,
+        chapter,
+        topic,
+        count
       }, {
         timeout: AI_SERVICE_TIMEOUT
       })
@@ -377,58 +341,37 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
       )
     }
 
-    const activity = aiResponse.data
+    const { questions } = aiResponse.data
 
-    const result = await query(
-      'INSERT INTO activities (title, subject, activity_type, duration, materials, steps, learning_outcomes, created_by, school_id, source_topic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-      [
-        activity.title,
-        subject,
-        activityType,
-        duration,
-        JSON.stringify(activity.materials),
-        JSON.stringify(activity.steps),
-        JSON.stringify(activity.learningOutcomes),
-        userId,
-        schoolId,
-        topic,
-      ]
-    )
-
-    await logEvent(userId, schoolId, 'teacher_generate_activity', {
-      topic,
-      subject,
-      gradeLevel,
-      duration,
-      activityType,
-    })
-
-    // Transform database response to match frontend expectations
-    const dbActivity = result.rows[0]
-
-    // Safe JSON parse - handle both stringified JSON and already-parsed objects
-    const parseJsonField = (field: any) => {
-      if (typeof field === 'string') {
-        try {
-          return JSON.parse(field)
-        } catch (e) {
-          return []
-        }
-      }
-      return Array.isArray(field) ? field : []
+    // Persist to DB in the new generated_questions table
+    const savedQuestions = []
+    for (const q of questions) {
+      const result = await query(
+        `INSERT INTO generated_questions 
+        (subject, chapter, difficulty, type, content, answer, explanation, options, class_level, created_by, school_id, metadata) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+        RETURNING id`,
+        [
+          subject,
+          chapter,
+          q.difficulty || 'medium',
+          q.type || 'multiple-choice',
+          q.content,
+          q.answer,
+          q.explanation || '',
+          JSON.stringify(q.options || []),
+          classLevel,
+          userId,
+          schoolId,
+          JSON.stringify({ topic }) // Save topic in metadata
+        ]
+      )
+      savedQuestions.push({ ...q, id: result.rows[0].id })
     }
 
-    const formattedActivity = {
-      title: dbActivity.title,
-      description: activity.learningOutcomes?.[0] || `Activity for ${topic}`,
-      instructions: parseJsonField(dbActivity.steps),
-      materials: parseJsonField(dbActivity.materials),
-      duration: `${dbActivity.duration} minutes`,
-      subject: dbActivity.subject,
-      gradeLevel: gradeLevel,
-    }
+    // Return format expected by frontend
+    res.json({ questions: savedQuestions })
 
-    res.json(formattedActivity)
   } catch (error) {
     next(error)
   }

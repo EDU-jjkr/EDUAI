@@ -1,9 +1,10 @@
 -- ===============================================
--- MASTER MIGRATION SCRIPT - EDU Backend
+-- MASTER MIGRATION SCRIPT - EDU Platform
 -- ===============================================
--- This script consolidates all migrations with idempotent operations
+-- This script consolidates ALL migrations with idempotent operations
 -- Safe to run multiple times - will skip already applied changes
--- Date: 2026-01-14
+-- Includes: LMS features + AI/Content features
+-- Date: 2026-01-24
 -- ===============================================
 
 BEGIN;
@@ -11,7 +12,6 @@ BEGIN;
 -- ===============================================
 -- MIGRATION TRACKING TABLE
 -- ===============================================
--- Create a table to track which migrations have been applied
 CREATE TABLE IF NOT EXISTS migration_history (
     id SERIAL PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
@@ -48,7 +48,346 @@ BEGIN
 END $$;
 
 -- ===============================================
--- MIGRATION 2: Password Reset Fields
+-- MIGRATION 2: Add Grade Levels and Subjects
+-- Source: 002_add_grade_and_subjects.sql
+-- ===============================================
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM migration_history WHERE migration_name = 'add_grade_and_subjects'
+    ) THEN
+        -- Add grade_level for students
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS grade_level VARCHAR(20);
+        
+        -- Add subjects_teaching for teachers
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS subjects_teaching JSONB DEFAULT '[]'::jsonb;
+        
+        -- Add profile completion tracking
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
+        
+        -- Add student's grade level to doubts table
+        ALTER TABLE doubts ADD COLUMN IF NOT EXISTS student_grade VARCHAR(20);
+        
+        -- Add AI confidence score
+        ALTER TABLE doubts ADD COLUMN IF NOT EXISTS confidence_score FLOAT DEFAULT 0.85;
+        
+        -- Create indexes
+        CREATE INDEX IF NOT EXISTS idx_users_grade_level 
+        ON users(grade_level) 
+        WHERE role = 'student';
+        
+        CREATE INDEX IF NOT EXISTS idx_doubts_student_grade 
+        ON doubts(student_grade);
+        
+        CREATE INDEX IF NOT EXISTS idx_doubts_subject_grade 
+        ON doubts(subject, student_grade);
+        
+        -- Record migration
+        INSERT INTO migration_history (migration_name, description) 
+        VALUES ('add_grade_and_subjects', 'Added grade levels and subjects to users');
+        
+        RAISE NOTICE '✓ Migration 2: Added grade levels and subjects';
+    ELSE
+        RAISE NOTICE '⊘ Migration 2: Already applied (add_grade_and_subjects)';
+    END IF;
+END $$;
+
+-- ===============================================
+-- MIGRATION 3: Add Attendance System
+-- Source: 003_add_attendance_system.sql
+-- ===============================================
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM migration_history WHERE migration_name = 'add_attendance_system'
+    ) THEN
+        -- Add section field for students
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS section VARCHAR(1);
+        
+        -- Add class teacher assignment for teachers
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS class_teacher_of VARCHAR(20);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(1);
+        
+        -- Add check constraint for valid sections
+        DO $section_check$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'check_valid_section'
+            ) THEN
+                ALTER TABLE users ADD CONSTRAINT check_valid_section 
+                CHECK (section IS NULL OR section IN ('A', 'B', 'C', 'D'));
+            END IF;
+        END $section_check$;
+        
+        -- Update existing attendance table structure (drop and recreate)
+        DROP TABLE IF EXISTS attendance CASCADE;
+        
+        CREATE TABLE attendance (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            teacher_id UUID NOT NULL REFERENCES users(id),
+            class VARCHAR(20) NOT NULL,
+            section VARCHAR(1) NOT NULL,
+            date DATE NOT NULL,
+            status VARCHAR(20) DEFAULT 'present' CHECK (status IN ('present', 'absent')),
+            marked_at TIMESTAMP DEFAULT NOW(),
+            school_id UUID REFERENCES schools(id),
+            created_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT unique_student_date UNIQUE(student_id, date)
+        );
+        
+        -- Add indexes for attendance
+        CREATE INDEX idx_attendance_date ON attendance(date);
+        CREATE INDEX idx_attendance_class_section ON attendance(class, section, date);
+        CREATE INDEX idx_attendance_teacher ON attendance(teacher_id, date);
+        CREATE INDEX idx_attendance_student ON attendance(student_id, date);
+        CREATE INDEX idx_attendance_school ON attendance(school_id, date);
+        
+        -- Create teacher_attendance table
+        CREATE TABLE IF NOT EXISTS teacher_attendance (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            status VARCHAR(20) DEFAULT 'present' CHECK (status IN ('present', 'absent')),
+            marked_at TIMESTAMP DEFAULT NOW(),
+            marked_by UUID REFERENCES users(id),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT unique_teacher_date UNIQUE(teacher_id, date)
+        );
+        
+        -- Add indexes for teacher attendance
+        CREATE INDEX IF NOT EXISTS idx_teacher_attendance_date ON teacher_attendance(date);
+        CREATE INDEX IF NOT EXISTS idx_teacher_attendance_teacher ON teacher_attendance(teacher_id, date);
+        
+        -- Record migration
+        INSERT INTO migration_history (migration_name, description) 
+        VALUES ('add_attendance_system', 'Added attendance system for students and teachers');
+        
+        RAISE NOTICE '✓ Migration 3: Added attendance system';
+    ELSE
+        RAISE NOTICE '⊘ Migration 3: Already applied (add_attendance_system)';
+    END IF;
+END $$;
+
+-- ===============================================
+-- MIGRATION 4: Add Homework, Exams, and Materials
+-- Source: 003_add_homework_results_materials.sql
+-- ===============================================
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM migration_history WHERE migration_name = 'add_homework_exams_materials'
+    ) THEN
+        -- Create homework table
+        CREATE TABLE IF NOT EXISTS homework (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            title VARCHAR(500) NOT NULL,
+            subject VARCHAR(100) NOT NULL,
+            description TEXT,
+            class_name VARCHAR(50) NOT NULL,
+            section VARCHAR(50),
+            due_date DATE NOT NULL,
+            school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+            assigned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Indexes for homework
+        CREATE INDEX IF NOT EXISTS idx_homework_class ON homework(class_name, section);
+        CREATE INDEX IF NOT EXISTS idx_homework_due_date ON homework(due_date);
+        CREATE INDEX IF NOT EXISTS idx_homework_assigned_by ON homework(assigned_by);
+        CREATE INDEX IF NOT EXISTS idx_homework_school ON homework(school_id);
+        
+        -- Create homework submissions table
+        CREATE TABLE IF NOT EXISTS homework_submissions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            homework_id UUID REFERENCES homework(id) ON DELETE CASCADE,
+            student_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'submitted', 'late')),
+            submitted_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(homework_id, student_id)
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_hw_submissions_student ON homework_submissions(student_id);
+        
+        -- Create exams table
+        CREATE TABLE IF NOT EXISTS exams (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            title VARCHAR(500) NOT NULL,
+            subject VARCHAR(100) NOT NULL,
+            exam_type VARCHAR(100) NOT NULL CHECK (exam_type IN ('Unit Test', 'Mid-Term', 'Final Exam', 'Quiz', 'Practical')),
+            class_name VARCHAR(50) NOT NULL,
+            section VARCHAR(50),
+            total_marks INTEGER NOT NULL,
+            exam_date DATE,
+            school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+            created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_exams_class ON exams(class_name, section);
+        CREATE INDEX IF NOT EXISTS idx_exams_subject ON exams(subject);
+        CREATE INDEX IF NOT EXISTS idx_exams_school ON exams(school_id);
+        
+        -- Create results table
+        CREATE TABLE IF NOT EXISTS results (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            exam_id UUID REFERENCES exams(id) ON DELETE CASCADE,
+            student_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            marks_obtained INTEGER NOT NULL,
+            remarks TEXT,
+            created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(exam_id, student_id)
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_results_student ON results(student_id);
+        CREATE INDEX IF NOT EXISTS idx_results_exam ON results(exam_id);
+        
+        -- Create study materials table
+        CREATE TABLE IF NOT EXISTS study_materials (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(500) NOT NULL,
+            file_type VARCHAR(50) NOT NULL CHECK (file_type IN ('pdf', 'doc', 'image', 'video', 'other')),
+            subject VARCHAR(100) NOT NULL,
+            file_url TEXT NOT NULL,
+            file_size VARCHAR(50),
+            class_name VARCHAR(50) NOT NULL,
+            section VARCHAR(50),
+            description TEXT,
+            school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+            uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_materials_class ON study_materials(class_name, section);
+        CREATE INDEX IF NOT EXISTS idx_materials_subject ON study_materials(subject);
+        CREATE INDEX IF NOT EXISTS idx_materials_school ON study_materials(school_id);
+        
+        -- Record migration
+        INSERT INTO migration_history (migration_name, description) 
+        VALUES ('add_homework_exams_materials', 'Added homework, exams, results, and study materials');
+        
+        RAISE NOTICE '✓ Migration 4: Added homework, exams, and materials';
+    ELSE
+        RAISE NOTICE '⊘ Migration 4: Already applied (add_homework_exams_materials)';
+    END IF;
+END $$;
+
+-- ===============================================
+-- MIGRATION 5: Add Announcements and Notifications
+-- Source: 004_add_announcements_notifications.sql
+-- ===============================================
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM migration_history WHERE migration_name = 'add_announcements_notifications'
+    ) THEN
+        -- Create announcements table
+        CREATE TABLE IF NOT EXISTS announcements (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            title VARCHAR(500) NOT NULL,
+            content TEXT NOT NULL,
+            target_audience VARCHAR(50) NOT NULL CHECK (target_audience IN ('all', 'students', 'teachers', 'class_specific')),
+            class_name VARCHAR(50),
+            section VARCHAR(50),
+            created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+            is_active BOOLEAN DEFAULT true,
+            expires_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_announcements_school ON announcements(school_id);
+        CREATE INDEX IF NOT EXISTS idx_announcements_target ON announcements(target_audience);
+        CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements(is_active, expires_at);
+        
+        -- Create notifications table
+        CREATE TABLE IF NOT EXISTS notifications (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(500) NOT NULL,
+            message TEXT,
+            notification_type VARCHAR(50) DEFAULT 'announcement' CHECK (notification_type IN ('announcement', 'homework', 'result', 'general')),
+            reference_id UUID,
+            reference_type VARCHAR(50),
+            is_read BOOLEAN DEFAULT false,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+        CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = false;
+        CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(notification_type);
+        
+        -- Record migration
+        INSERT INTO migration_history (migration_name, description) 
+        VALUES ('add_announcements_notifications', 'Added announcements and notifications system');
+        
+        RAISE NOTICE '✓ Migration 5: Added announcements and notifications';
+    ELSE
+        RAISE NOTICE '⊘ Migration 5: Already applied (add_announcements_notifications)';
+    END IF;
+END $$;
+
+-- ===============================================
+-- MIGRATION 6: Add Class Teacher Assignment
+-- Source: 005_add_class_teacher_assignment.sql
+-- ===============================================
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM migration_history WHERE migration_name = 'add_class_teacher_assignment'
+    ) THEN
+        -- Add class_teacher_id to classes table
+        DO $class_teacher$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'classes' AND column_name = 'class_teacher_id'
+            ) THEN
+                ALTER TABLE classes ADD COLUMN class_teacher_id UUID REFERENCES users(id) ON DELETE SET NULL;
+            END IF;
+        END $class_teacher$;
+        
+        -- Add index for faster lookups
+        CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(class_teacher_id);
+        
+        -- Add assigned_class_id to users table
+        DO $assigned_class$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'assigned_class_id'
+            ) THEN
+                ALTER TABLE users ADD COLUMN assigned_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;
+            END IF;
+        END $assigned_class$;
+        
+        CREATE INDEX IF NOT EXISTS idx_users_assigned_class ON users(assigned_class_id);
+        
+        -- Record migration
+        INSERT INTO migration_history (migration_name, description) 
+        VALUES ('add_class_teacher_assignment', 'Added class teacher assignment to classes and users');
+        
+        RAISE NOTICE '✓ Migration 6: Added class teacher assignment';
+    ELSE
+        RAISE NOTICE '⊘ Migration 6: Already applied (add_class_teacher_assignment)';
+    END IF;
+END $$;
+
+-- ===============================================
+-- MIGRATION 7: Password Reset Fields
 -- Source: add_password_reset_fields.sql
 -- ===============================================
 
@@ -80,14 +419,14 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('add_password_reset_fields', 'Added password reset and department fields');
         
-        RAISE NOTICE '✓ Migration 2: Added password reset fields';
+        RAISE NOTICE '✓ Migration 7: Added password reset fields';
     ELSE
-        RAISE NOTICE '⊘ Migration 2: Already applied (add_password_reset_fields)';
+        RAISE NOTICE '⊘ Migration 7: Already applied (add_password_reset_fields)';
     END IF;
 END $$;
 
 -- ===============================================
--- MIGRATION 3: Phase 1 Lesson Schema
+-- MIGRATION 8: Phase 1 Lesson Schema
 -- Source: phase1_lesson_schema.sql
 -- ===============================================
 
@@ -133,14 +472,14 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('phase1_lesson_schema', 'Added lesson metadata and Bloom taxonomy support');
         
-        RAISE NOTICE '✓ Migration 3: Added lesson schema';
+        RAISE NOTICE '✓ Migration 8: Added lesson schema';
     ELSE
-        RAISE NOTICE '⊘ Migration 3: Already applied (phase1_lesson_schema)';
+        RAISE NOTICE '⊘ Migration 8: Already applied (phase1_lesson_schema)';
     END IF;
 END $$;
 
 -- ===============================================
--- MIGRATION 4: Visual Metadata to Slides
+-- MIGRATION 9: Visual Metadata to Slides
 -- Source: add_visual_metadata_to_slides.sql
 -- ===============================================
 
@@ -174,14 +513,14 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('add_visual_metadata_to_slides', 'Added visual metadata columns to slides');
         
-        RAISE NOTICE '✓ Migration 4: Added visual metadata';
+        RAISE NOTICE '✓ Migration 9: Added visual metadata';
     ELSE
-        RAISE NOTICE '⊘ Migration 4: Already applied (add_visual_metadata_to_slides)';
+        RAISE NOTICE '⊘ Migration 9: Already applied (add_visual_metadata_to_slides)';
     END IF;
 END $$;
 
 -- ===============================================
--- MIGRATION 5: Topic Generator Tables
+-- MIGRATION 10: Topic Generator Tables
 -- Source: add_topic_generator.sql
 -- ===============================================
 
@@ -221,14 +560,14 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('add_topic_generator', 'Added topic generator tables');
         
-        RAISE NOTICE '✓ Migration 5: Added topic generator tables';
+        RAISE NOTICE '✓ Migration 10: Added topic generator tables';
     ELSE
-        RAISE NOTICE '⊘ Migration 5: Already applied (add_topic_generator)';
+        RAISE NOTICE '⊘ Migration 10: Already applied (add_topic_generator)';
     END IF;
 END $$;
 
 -- ===============================================
--- MIGRATION 6: Source Tracking
+-- MIGRATION 11: Source Tracking
 -- Source: add_source_tracking.sql
 -- ===============================================
 
@@ -261,14 +600,14 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('add_source_tracking', 'Added source tracking for better caching');
         
-        RAISE NOTICE '✓ Migration 6: Added source tracking';
+        RAISE NOTICE '✓ Migration 11: Added source tracking';
     ELSE
-        RAISE NOTICE '⊘ Migration 6: Already applied (add_source_tracking)';
+        RAISE NOTICE '⊘ Migration 11: Already applied (add_source_tracking)';
     END IF;
 END $$;
 
 -- ===============================================
--- MIGRATION 7: Question Generator Tables
+-- MIGRATION 12: Question Generator Tables
 -- Source: add_question_generator_tables.sql
 -- ===============================================
 
@@ -499,9 +838,9 @@ BEGIN
         INSERT INTO migration_history (migration_name, description) 
         VALUES ('add_question_generator_tables', 'Added question generator tables and schemas');
         
-        RAISE NOTICE '✓ Migration 7: Added question generator tables';
+        RAISE NOTICE '✓ Migration 12: Added question generator tables';
     ELSE
-        RAISE NOTICE '⊘ Migration 7: Already applied (add_question_generator_tables)';
+        RAISE NOTICE '⊘ Migration 12: Already applied (add_question_generator_tables)';
     END IF;
 END $$;
 

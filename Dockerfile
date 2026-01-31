@@ -36,9 +36,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies and dumb-init
+# Install runtime dependencies (removed dumb-init to fix log buffering)
 RUN apk add --no-cache \
-    dumb-init \
     cairo \
     jpeg \
     pango \
@@ -54,6 +53,9 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy migrations directory
+COPY --from=builder /app/migrations ./migrations
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
@@ -63,6 +65,10 @@ RUN mkdir logs && chown -R nodejs:nodejs logs
 
 USER nodejs
 
+# Environment variables for unbuffered output
+ENV NODE_ENV=production
+ENV FORCE_COLOR=1
+
 # Expose port
 EXPOSE 3000
 
@@ -70,6 +76,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start with dumb-init
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/index.js"]
+# Start Node.js directly with unbuffered output
+CMD ["node", "--trace-warnings", "dist/index.js"]

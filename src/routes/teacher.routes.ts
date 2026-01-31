@@ -39,11 +39,10 @@ router.delete('/deck/:id', teacherController.deleteDeck)
 router.post(
   '/activity/generate',
   [
-    body('topic').trim().notEmpty(),
+    body('classLevel').trim().notEmpty(),
     body('subject').trim().notEmpty(),
-    body('duration').isInt({ min: 5 }),
-    body('activityType').trim().notEmpty(),
-    body('gradeLevel').trim().notEmpty(),
+    body('chapter').trim().notEmpty(),
+    body('topic').trim().notEmpty(),
   ],
   teacherController.generateActivity
 )
