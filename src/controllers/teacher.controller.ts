@@ -449,11 +449,11 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topics, subject, gradeLevel, totalDuration, forceRegenerate = false } = req.body
+    const { topics, subject, gradeLevel, classDuration = 45, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
-    // Smart Caching: Check for existing lesson plan with matching source_topics
+    // Smart Caching: Check for existing lesson plan with matching source_topics and classDuration
     if (!forceRegenerate) {
       const topicsArray = Array.isArray(topics) ? topics : [topics]
       const existingPlan = await query(
@@ -478,11 +478,12 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
 
     let aiResponse
     try {
+      // AI will determine number of sessions based on topic count
       aiResponse = await axios.post(`${AI_SERVICE_URL}/api/lesson-plan/generate-lesson-plan`, {
         topics,
         subject,
         gradeLevel,
-        totalDuration,
+        classDuration,
       }, {
         timeout: AI_SERVICE_TIMEOUT
       })
@@ -498,18 +499,29 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
     const lessonPlan = aiResponse.data
 
     const topicsArray = Array.isArray(topics) ? topics : [topics]
+
+    // Store using the new schema with sessions instead of sequence
     const result = await query(
-      'INSERT INTO lesson_plans (title, subject, grade_level, duration, objectives, concepts, sequence, assessments, resources, created_by, school_id, source_topics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
+      `INSERT INTO lesson_plans (
+        title, subject, grade_level, duration, objectives, concepts, 
+        sequence, assessments, resources, created_by, school_id, source_topics
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
         lessonPlan.title,
         subject,
         gradeLevel,
-        totalDuration,
+        lessonPlan.totalDuration, // AI calculates total duration
         JSON.stringify(lessonPlan.objectives),
         JSON.stringify(lessonPlan.concepts),
-        JSON.stringify(lessonPlan.sequence),
+        JSON.stringify(lessonPlan.sessions), // Store sessions in sequence column
         JSON.stringify(lessonPlan.assessments),
-        JSON.stringify(lessonPlan.resources),
+        JSON.stringify({
+          resources: lessonPlan.resources,
+          prerequisites: lessonPlan.prerequisites,
+          differentiation: lessonPlan.differentiation,
+          standards: lessonPlan.standards,
+          totalSessions: lessonPlan.totalSessions
+        }),
         userId,
         schoolId,
         topicsArray,
@@ -519,11 +531,14 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
     await logEvent(userId, schoolId, 'teacher_generate_lesson_plan', {
       subject,
       gradeLevel,
-      totalDuration,
+      totalDuration: lessonPlan.totalDuration, // From AI response
+      classDuration,
+      totalSessions: lessonPlan.totalSessions,
       topicsCount: Array.isArray(topics) ? topics.length : 0,
     })
 
-    res.json(result.rows[0])
+    // Return AI response directly (has full structure) instead of DB row
+    res.json(lessonPlan)
   } catch (error) {
     next(error)
   }

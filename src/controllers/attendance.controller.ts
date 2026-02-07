@@ -249,32 +249,63 @@ export const getTeacherPresence = async (req: AuthRequest, res: Response, next: 
         const { date } = req.query
         const targetDate = date || new Date().toISOString().split('T')[0]
 
-        const result = await query(
-            `SELECT 
-        ta.id, ta.teacher_id, ta.status, ta.marked_at,
-        u.name as teacher_name, u.email as teacher_email, u.class_teacher_of
-       FROM teacher_attendance ta
-       JOIN users u ON ta.teacher_id = u.id
-       WHERE ta.date = $1
-       ORDER BY u.name`,
+        // Get all teachers
+        const allTeachers = await query(
+            `SELECT id, name, email FROM users WHERE role = 'teacher'`
+        )
+
+        // Get teachers who marked attendance today
+        const teachersWithAttendance = await query(
+            `SELECT DISTINCT teacher_id FROM attendance WHERE date = $1`,
             [targetDate]
         )
 
-        const presentTeachers = result.rows.filter(r => r.status === 'present')
-        const absentTeachers = result.rows.filter(r => r.status === 'absent')
+        const presentTeacherIds = new Set(teachersWithAttendance.rows.map(row => row.teacher_id))
 
-        // Get total teachers count
-        const totalResult = await query(
-            `SELECT COUNT(*) as total FROM users WHERE role = 'teacher'`
+        const present: any[] = []
+        const absent: any[] = []
+
+        allTeachers.rows.forEach((teacher: any) => {
+            if (presentTeacherIds.has(teacher.id)) {
+                present.push(teacher)
+            } else {
+                absent.push(teacher)
+            }
+        })
+
+        res.json({ present, absent })
+    } catch (error) {
+        next(error)
+    }
+}
+
+// Get student presence summary
+export const getStudentPresence = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+        const { date } = req.query
+        const targetDate = date || new Date().toISOString().split('T')[0]
+
+        const result = await query(
+            `SELECT 
+                COUNT(*) FILTER (WHERE status = 'present') as present_count,
+                COUNT(*) FILTER (WHERE status = 'absent') as absent_count,
+                COUNT(*) FILTER (WHERE status = 'late') as late_count,
+                COUNT(*) FILTER (WHERE status = 'excused') as excused_count,
+                COUNT(*) as total_count
+            FROM attendance
+            WHERE date = $1`,
+            [targetDate]
         )
+
+        const stats = result.rows[0] || { present_count: 0, absent_count: 0, late_count: 0, excused_count: 0, total_count: 0 }
 
         res.json({
             date: targetDate,
-            totalTeachers: parseInt(totalResult.rows[0].total),
-            presentCount: presentTeachers.length,
-            absentCount: absentTeachers.length,
-            presentTeachers,
-            absentTeachers
+            present: parseInt(stats.present_count) || 0,
+            absent: parseInt(stats.absent_count) || 0,
+            late: parseInt(stats.late_count) || 0,
+            excused: parseInt(stats.excused_count) || 0,
+            total: parseInt(stats.total_count) || 0
         })
     } catch (error) {
         next(error)

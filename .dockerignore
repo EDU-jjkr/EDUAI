@@ -1,14 +1,49 @@
+# Dependencies
 node_modules
+
+# Build output (we rebuild in Docker)
 dist
+
+# Logs
 npm-debug.log
+*.log
+logs
+
+# Environment files (keep these OUT of docker image for security)
 .env
 .env.local
 .env.*.local
+
+# Version control
 .git
 .gitignore
-README.md
+
+# IDE
 .vscode
 .idea
+
+# Testing
 coverage
 .nyc_output
-*.log
+
+# Docker files themselves
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation (not needed in production)
+README.md
+docs
+*.md
+
+# TypeScript source maps (optional - remove if you want debugging)
+# *.map
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.swp
+*~

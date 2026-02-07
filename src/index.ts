@@ -35,11 +35,25 @@ const PORT = Number(process.env.PORT) || 3001
 app.use(helmet())
 // Allow all origins in development for mobile device testing
 // In production, allow configured origins including api.sikhsha.in
-const corsOrigin = process.env.NODE_ENV === 'production'
-  ? (process.env.CORS_ORIGIN || 'https://api.sikhsha.in')
-  : '*' // Allow all origins in development
 app.use(cors({
-  origin: corsOrigin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true)
+
+    // Allow all origins in development
+    if (process.env.NODE_ENV !== 'production') return callback(null, true)
+
+    const allowedOrigins = [
+      'https://api.sikhsha.in',
+      'https://aidashboard.sikhsha.in',
+    ]
+
+    if (allowedOrigins.indexOf(origin) !== -1 || origin === process.env.CORS_ORIGIN) {
+      return callback(null, true)
+    }
+
+    callback(new Error('Not allowed by CORS'))
+  },
   credentials: true,
 }))
 app.use(express.json())

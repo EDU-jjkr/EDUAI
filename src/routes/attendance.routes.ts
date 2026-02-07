@@ -68,6 +68,14 @@ router.get(
     attendanceController.getTeacherPresence
 )
 
+// Get student presence summary
+router.get(
+    '/admin/students/presence',
+    authenticate,
+    authorize('admin'),
+    attendanceController.getStudentPresence
+)
+
 // Get monthly attendance summary
 router.get(
     '/admin/monthly',

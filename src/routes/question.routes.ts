@@ -13,7 +13,7 @@ import {
 const router = Router()
 
 // Get QUESTION_GENERATOR_URL from environment
-const QUESTION_GENERATOR_URL = process.env.QUESTION_GENERATOR_URL || 'http://localhost:5000'
+const QUESTION_GENERATOR_URL = process.env.QUESTION_GENERATOR_URL || 'http://127.0.0.1:5000'
 
 // JSON endpoints require authentication and teacher role
 router.post('/generate', authenticate, authorize('teacher', 'admin'), generateQuestions)

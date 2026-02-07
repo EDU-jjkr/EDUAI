@@ -52,14 +52,14 @@ router.get('/activity/:id', teacherController.getActivityById)
 router.put('/activity/:id', teacherController.updateActivity)
 router.delete('/activity/:id', teacherController.deleteActivity)
 
-// Lesson Plan Generation
+// Lesson Plan Generation (AI auto-determines session count based on topics)
 router.post(
   '/lesson-plan/generate',
   [
     body('topics').isArray({ min: 1 }),
     body('subject').trim().notEmpty(),
     body('gradeLevel').trim().notEmpty(),
-    body('totalDuration').isInt({ min: 30 }),
+    body('classDuration').optional().isInt({ min: 15, max: 120 }).withMessage('Class duration must be between 15 and 120 minutes'),
   ],
   teacherController.generateLessonPlan
 )

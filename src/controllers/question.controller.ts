@@ -3,10 +3,18 @@ import axios from 'axios'
 import { AppError } from '../middleware/error-handler'
 import type { AuthRequest } from '../middleware/auth'
 
-const QUESTION_GENERATOR_URL = process.env.QUESTION_GENERATOR_URL || 'http://localhost:5000'
+const QUESTION_GENERATOR_URL = process.env.QUESTION_GENERATOR_URL || 'http://127.0.0.1:5000'
+console.log('[Question Controller] Using QUESTION_GENERATOR_URL:', QUESTION_GENERATOR_URL)
 
 // Helper function to handle axios errors gracefully
 const handleAxiosError = (error: any, next: NextFunction, defaultMessage: string, errorCode: string) => {
+    console.log('[Question Controller] Error details:', {
+        code: error.code,
+        message: error.message,
+        hasResponse: !!error.response,
+        responseStatus: error.response?.status
+    })
+
     if (error.response) {
         // Extract detailed error message from response
         const responseData = error.response.data
@@ -28,7 +36,7 @@ const handleAxiosError = (error: any, next: NextFunction, defaultMessage: string
         ))
     }
     // Handle connection errors (service not available)
-    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND' || error.code === 'ECONNRESET' || error.code === 'ERR_SOCKET_CONNECTION_TIMEOUT') {
         return next(new AppError(
             'Question Generator service is not available. Please try again later.',
             503,
