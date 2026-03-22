@@ -91,6 +91,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Use tini as init process for proper signal handling and log forwarding
 # --trace-warnings shows where warnings come from
-# 2>&1 ensures stderr goes to stdout for unified logging
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "--trace-warnings", "--unhandled-rejections=strict", "dist/index.js"]
