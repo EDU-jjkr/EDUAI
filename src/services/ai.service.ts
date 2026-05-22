@@ -17,11 +17,16 @@ export interface AIResponse<T = any> {
     message?: string
 }
 
+export interface AIRequest {
+    route?: string
+    payload?: any
+}
+
 /**
  * Make AI generation request with graceful failure handling.
  * Never throws - always returns an AIResponse object.
  */
-export async function aiGenerate(payload: any): Promise<AIResponse> {
+export async function aiGenerate(request: AIRequest): Promise<AIResponse> {
     if (!AI_BASE_URL) {
         logger.warn('AI service not configured (AI_SERVICE_URL missing)')
         return {
@@ -30,8 +35,15 @@ export async function aiGenerate(payload: any): Promise<AIResponse> {
         }
     }
 
+    if (!request?.route) {
+        return {
+            success: false,
+            message: 'AI route is required'
+        }
+    }
+
     try {
-        const res = await aiClient.post('/generate', payload)
+        const res = await aiClient.post(request.route, request.payload ?? {})
         return {
             success: true,
             data: res.data
