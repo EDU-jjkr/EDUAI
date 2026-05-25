@@ -6,10 +6,12 @@ export interface AuthRequest extends Request {
   user?: {
     id: string
     email: string
-    role: string
+    role: 'teacher' | 'student' | 'admin' | 'super_admin' | string
     school_id?: string | null
     grade_level?: string | null
   }
+  /** Set by scopeToSchool middleware — the active tenant school_id (null = super-admin all-schools view) */
+  tenantId?: string | null
 }
 
 

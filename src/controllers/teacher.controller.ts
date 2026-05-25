@@ -5,6 +5,15 @@ import { query } from '../config/database'
 import { AppError } from '../middleware/error-handler'
 import type { AuthRequest } from '../middleware/auth'
 import { logEvent } from '../services/analytics.service'
+import {
+  buildCanonicalDeckResponse,
+  fetchDeckWithSlides,
+  insertStructuredDeck,
+  normalizeLessonDeck,
+  replaceDeckSlides,
+  resolveDeckTheme,
+  updateStructuredDeck,
+} from '../services/deck-lesson.service'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL
 const AI_SERVICE_TIMEOUT = parseInt(process.env.AI_SERVICE_TIMEOUT || '120000', 10) // 2 minutes for AI generation
@@ -15,6 +24,114 @@ const aiClient = AI_SERVICE_URL ? axios.create({
   timeout: AI_SERVICE_TIMEOUT
 }) : null
 
+function countClusterSlidesByRole(
+  slides: Array<{ clusterId?: string | null; pedagogicalRole?: string | null }>,
+  clusterId: string,
+  pedagogicalRole: string
+) {
+  return slides.filter((slide) => slide.clusterId === clusterId && slide.pedagogicalRole === pedagogicalRole).length
+}
+
+function normalizeComparableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeComparableValue)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = normalizeComparableValue((value as Record<string, unknown>)[key])
+        return acc
+      }, {})
+  }
+
+  return value ?? null
+}
+
+function buildComparableSlideSnapshot(slide: any) {
+  return normalizeComparableValue({
+    id: slide.id ?? null,
+    title: slide.title ?? null,
+    content: slide.content ?? null,
+    order: slide.order ?? null,
+    clusterId: slide.clusterId ?? null,
+    pedagogicalRole: slide.pedagogicalRole ?? null,
+    layoutCandidates: slide.layoutCandidates ?? [],
+    editingHints: slide.editingHints ?? null,
+    visualIntent: slide.visualIntent ?? null,
+    visualMetadata: slide.visualMetadata ?? null,
+  })
+}
+
+function assertOriginalSlidesPreserved(
+  originalSlides: any[],
+  nextSlides: any[],
+  clusterId: string,
+  requestedRole: string
+) {
+  if (nextSlides.length !== originalSlides.length + 1) {
+    throw new AppError(
+      'AI regeneration returned an invalid cluster expansion',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+
+  const originalTargetSlides = originalSlides.filter((slide) => slide.clusterId === clusterId)
+  const nextTargetSlides = nextSlides.filter((slide) => slide.clusterId === clusterId)
+  if (nextTargetSlides.length !== originalTargetSlides.length + 1) {
+    throw new AppError(
+      'AI regeneration returned an invalid cluster expansion',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+
+  const originalTargetComparable = originalTargetSlides.map(buildComparableSlideSnapshot)
+  const nextTargetComparable = nextTargetSlides.map(buildComparableSlideSnapshot)
+  const appendedComparable = nextTargetComparable.slice(0, originalTargetComparable.length)
+
+  if (JSON.stringify(appendedComparable) !== JSON.stringify(originalTargetComparable)) {
+    throw new AppError(
+      'AI regeneration mutated existing target-cluster slides',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+
+  const newTargetSlide = nextTargetSlides[originalTargetSlides.length]
+  if (!newTargetSlide || newTargetSlide.pedagogicalRole !== requestedRole) {
+    throw new AppError(
+      'AI regeneration did not add the requested target-cluster slide',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+
+  const originalNonTargetSlides = originalSlides.filter((slide) => slide.clusterId !== clusterId)
+  const nextNonTargetSlides = nextSlides.filter((slide) => slide.clusterId !== clusterId)
+
+  if (originalNonTargetSlides.length !== nextNonTargetSlides.length) {
+    throw new AppError(
+      'AI regeneration changed unrelated slides',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+
+  const originalNonTargetComparable = originalNonTargetSlides.map(buildComparableSlideSnapshot)
+  const nextNonTargetComparable = nextNonTargetSlides.map(buildComparableSlideSnapshot)
+
+  if (JSON.stringify(originalNonTargetComparable) !== JSON.stringify(nextNonTargetComparable)) {
+    throw new AppError(
+      'AI regeneration changed unrelated slides',
+      502,
+      'DECK_CLUSTER_REGEN_INVALID'
+    )
+  }
+}
+
 export const generateDeck = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req)
@@ -24,9 +141,10 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topics, topic, subject, gradeLevel, chapter, level, forceRegenerate = false } = req.body
+    const { topics, topic, subject, gradeLevel, chapter, level, theme, additionalInstructions, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
+    const resolvedTheme = resolveDeckTheme(theme, subject)
 
     // Handle both formats: topics array (new) or single topic (legacy)
     // Validate topics is an array
@@ -57,14 +175,10 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       )
 
       if (existingDeck.rows.length > 0) {
-        const deck = existingDeck.rows[0]
-        const slidesResult = await query('SELECT * FROM slides WHERE deck_id = $1 ORDER BY slide_order', [deck.id])
-
-        // Return existing deck
-        return res.json({
-          ...deck,
-          slides: slidesResult.rows
-        })
+        const cachedDeck = await fetchDeckWithSlides(existingDeck.rows[0].id, schoolId)
+        if (cachedDeck) {
+          return res.json(cachedDeck)
+        }
       }
     }
 
@@ -87,6 +201,8 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
         chapter,
         numSlides,
         level: level || 'CORE', // Pass differentiation level (SUPPORT, CORE, EXTENSION)
+        theme: resolvedTheme,
+        additionalInstructions,
         structuredFormat: true, // Signal to use new structured format
       }, {
         timeout: AI_SERVICE_TIMEOUT
@@ -103,28 +219,25 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
     // Debug: Log the full response to see what we're getting
     console.log('AI Response received:', JSON.stringify(aiResponse.data, null, 2))
 
-    const { title, slides } = aiResponse.data
+    const lesson = normalizeLessonDeck(aiResponse.data, {
+      subject,
+      gradeLevel,
+      topic: topicsArray.join(', '),
+      title: aiResponse.data?.title || topicsArray.join(', '),
+      theme: resolvedTheme,
+    })
+    const deckTitle = aiResponse.data?.title || lesson.meta.topic
 
-    // Save to database with source tracking
-    const deckResult = await query(
-      'INSERT INTO decks (title, subject, grade_level, created_by, school_id, source_topics, source_chapter) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [title, subject, gradeLevel, userId, schoolId, topicsArray, chapter]
-    )
-
-    const deck = deckResult.rows[0]
-
-    // Save slides
-    for (const slide of slides) {
-      await query(
-        `INSERT INTO slides (deck_id, title, content, slide_order) VALUES ($1, $2, $3, $4)`,
-        [
-          deck.id,
-          slide.title,
-          slide.content,
-          slide.order
-        ]
-      )
-    }
+    const deck = await insertStructuredDeck({
+      title: deckTitle,
+      subject,
+      gradeLevel,
+      userId,
+      schoolId,
+      sourceTopics: topicsArray,
+      sourceChapter: chapter,
+      lesson,
+    })
 
     await logEvent(userId, schoolId, 'teacher_generate_deck', {
       topics: topicsArray,
@@ -134,10 +247,7 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       numSlides,
     })
 
-    res.json({
-      ...deck,
-      slides,
-    })
+    res.json(buildCanonicalDeckResponse(deck, lesson))
   } catch (error) {
     next(error)
   }
@@ -167,24 +277,13 @@ export const getDeckById = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const { id } = req.params
     const schoolId = req.user!.school_id || null
-    const result = await query(
-      'SELECT * FROM decks WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
-      [id, schoolId]
-    )
+    const deck = await fetchDeckWithSlides(id, schoolId)
 
-    if (result.rows.length === 0) {
+    if (!deck) {
       throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
     }
 
-    const slidesResult = await query(
-      'SELECT * FROM slides WHERE deck_id = $1 ORDER BY slide_order',
-      [id]
-    )
-
-    res.json({
-      ...result.rows[0],
-      slides: slidesResult.rows,
-    })
+    res.json(deck)
   } catch (error) {
     next(error)
   }
@@ -193,21 +292,229 @@ export const getDeckById = async (req: AuthRequest, res: Response, next: NextFun
 export const updateDeck = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params
-    const { title, slides } = req.body
+    const { title, slides, lesson, meta, structure } = req.body
     const schoolId = req.user!.school_id || null
+    const existingDeck = await fetchDeckWithSlides(id, schoolId)
 
-    await query('UPDATE decks SET title = $1, updated_at = NOW() WHERE id = $2 AND school_id = $3', [title, id, schoolId])
-
-    if (slides) {
-      for (const slide of slides) {
-        await query(
-          'UPDATE slides SET title = $1, content = $2 WHERE id = $3',
-          [slide.title, slide.content, slide.id]
-        )
-      }
+    if (!existingDeck) {
+      throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
     }
 
-    res.json({ message: 'Deck updated successfully' })
+    const lessonPayload = lesson ?? (meta || structure || slides ? { meta, structure, slides } : null)
+    const normalizedLesson = normalizeLessonDeck(
+      lessonPayload ? { lesson: lessonPayload } : { title: title || existingDeck.title, slides },
+      {
+        ...existingDeck.lesson,
+        subject: existingDeck.subject,
+        gradeLevel: existingDeck.grade_level,
+        topic: existingDeck.lesson.meta.topic,
+        title: title || existingDeck.title,
+      }
+    )
+    const deckTitle = title || normalizedLesson.meta.topic || existingDeck.title
+
+    const updatedDeck = await updateStructuredDeck({
+      deckId: id,
+      title: deckTitle,
+      lesson: normalizedLesson,
+    })
+
+    res.json(buildCanonicalDeckResponse(updatedDeck, normalizedLesson))
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const regenerateDeckCluster = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { deckId, clusterId, pedagogicalRole, theme } = req.body
+    const schoolId = req.user!.school_id || null
+    const currentDeck = await fetchDeckWithSlides(String(deckId), schoolId)
+
+    if (!currentDeck) {
+      throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
+    }
+
+    const clusterSlides = currentDeck.lesson.slides.filter((slide) => slide.clusterId === clusterId)
+    if (!clusterSlides.length) {
+      throw new AppError('Deck cluster not found', 404, 'DECK_CLUSTER_NOT_FOUND')
+    }
+
+    if (!AI_SERVICE_URL) {
+      throw new AppError(
+        'AI service is not configured. Please contact administrator.',
+        500,
+        'AI_SERVICE_NOT_CONFIGURED'
+      )
+    }
+
+    const requestedRole = typeof pedagogicalRole === 'string' && pedagogicalRole.trim()
+      ? pedagogicalRole.trim()
+      : 'explain_deepen'
+    const originalSlideCount = currentDeck.lesson.slides.length
+    const originalTargetRoleCount = countClusterSlidesByRole(currentDeck.lesson.slides, clusterId, requestedRole)
+
+    const fullDeckContext = {
+      lesson: currentDeck.lesson,
+      title: currentDeck.title,
+      slides: currentDeck.slides,
+      meta: currentDeck.meta,
+      structure: currentDeck.structure,
+    }
+
+    let aiResponse
+    try {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/deck/regenerate-cluster`, {
+        deckId: String(deckId),
+        clusterId: String(clusterId),
+        pedagogicalRole: requestedRole,
+        theme: theme || currentDeck.lesson.meta.theme,
+        currentDeck: fullDeckContext,
+        subject: currentDeck.subject,
+        gradeLevel: currentDeck.grade_level,
+      })
+    } catch (aiError: any) {
+      console.error('AI service error:', aiError.response?.data || aiError.message)
+      throw new AppError(
+        aiError.response?.data?.detail || 'AI service failed to regenerate deck cluster',
+        500,
+        'AI_SERVICE_ERROR'
+      )
+    }
+
+    const normalizedLesson = normalizeLessonDeck(aiResponse.data, {
+      ...currentDeck.lesson,
+      subject: currentDeck.subject,
+      gradeLevel: currentDeck.grade_level,
+      topic: currentDeck.lesson.meta.topic,
+      title: currentDeck.title,
+      theme: resolveDeckTheme(theme || currentDeck.lesson.meta.theme, currentDeck.subject),
+    })
+
+    const normalizedClusterSlides = normalizedLesson.slides.filter((slide) => slide.clusterId === clusterId)
+
+    if (!normalizedClusterSlides.length) {
+      throw new AppError(
+        'AI regeneration returned a deck without the target cluster',
+        502,
+        'DECK_CLUSTER_REGEN_INVALID'
+      )
+    }
+
+    if (normalizedLesson.slides.length !== originalSlideCount + 1) {
+      throw new AppError(
+        'AI regeneration returned an invalid cluster expansion',
+        502,
+        'DECK_CLUSTER_REGEN_INVALID'
+      )
+    }
+
+    if (countClusterSlidesByRole(normalizedLesson.slides, clusterId, requestedRole) !== originalTargetRoleCount + 1) {
+      throw new AppError(
+        'AI regeneration returned an invalid cluster expansion',
+        502,
+        'DECK_CLUSTER_REGEN_INVALID'
+      )
+    }
+
+    assertOriginalSlidesPreserved(currentDeck.lesson.slides, normalizedLesson.slides, clusterId, requestedRole)
+
+    const updatedDeck = await updateStructuredDeck({
+      deckId: String(deckId),
+      title: currentDeck.title,
+      lesson: normalizedLesson,
+    })
+
+    res.json(buildCanonicalDeckResponse(updatedDeck, normalizedLesson))
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const switchDeckSlideLayout = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { deckId, slideId, layoutId } = req.body
+    const schoolId = req.user!.school_id || null
+    const currentDeck = await fetchDeckWithSlides(String(deckId), schoolId)
+
+    if (!currentDeck) {
+      throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
+    }
+
+    const targetSlide = currentDeck.lesson.slides.find((slide) => slide.id === slideId)
+    if (!targetSlide) {
+      throw new AppError('Slide not found', 404, 'DECK_SLIDE_NOT_FOUND')
+    }
+
+    const normalizedLayoutId = typeof layoutId === 'string' && layoutId.trim()
+      ? layoutId.trim()
+      : null
+    if (!normalizedLayoutId) {
+      throw new AppError('layoutId is required', 400, 'DECK_LAYOUT_REQUIRED')
+    }
+
+    const allowedLayouts = targetSlide.layoutCandidates || []
+    if (!allowedLayouts.includes(normalizedLayoutId)) {
+      throw new AppError('Layout not allowed for this slide', 400, 'DECK_LAYOUT_NOT_ALLOWED')
+    }
+
+    const nextSlides = currentDeck.lesson.slides.map((slide) => {
+      if (slide.id !== slideId) {
+        return slide
+      }
+
+      const existingLayouts = slide.layoutCandidates || []
+      return {
+        ...slide,
+        layoutCandidates: [
+          normalizedLayoutId,
+          ...existingLayouts.filter((candidate) => candidate !== normalizedLayoutId),
+        ],
+        ...(slide.visualMetadata
+          ? {
+            visualMetadata: {
+              ...slide.visualMetadata,
+              visualConfig: {
+                ...(slide.visualMetadata.visualConfig || {}),
+                selectedLayout: normalizedLayoutId,
+              },
+            },
+          }
+          : {}),
+      }
+    })
+
+    const normalizedLesson = normalizeLessonDeck({
+      lesson: {
+        meta: currentDeck.lesson.meta,
+        structure: currentDeck.lesson.structure,
+        slides: nextSlides,
+      },
+    }, {
+      subject: currentDeck.subject,
+      gradeLevel: currentDeck.grade_level,
+      topic: currentDeck.lesson.meta.topic,
+      title: currentDeck.title,
+      theme: currentDeck.lesson.meta.theme,
+    })
+
+    const updatedDeck = await updateStructuredDeck({
+      deckId: String(deckId),
+      title: currentDeck.title,
+      lesson: normalizedLesson,
+    })
+
+    res.json(buildCanonicalDeckResponse(updatedDeck, normalizedLesson))
   } catch (error) {
     next(error)
   }
@@ -221,32 +528,23 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
     const schoolId = req.user!.school_id || null
 
     // 1. Fetch current deck
-    const deckResult = await query(
-      'SELECT * FROM decks WHERE id = $1 AND (school_id = $2 OR (school_id IS NULL AND $2 IS NULL))',
-      [id, schoolId]
-    )
-    if (deckResult.rows.length === 0) {
+    const currentDeck = await fetchDeckWithSlides(id, schoolId)
+    if (!currentDeck) {
       throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
     }
-    const currentDeck = deckResult.rows[0]
-
-    // 2. Fetch current slides
-    const slidesResult = await query('SELECT * FROM slides WHERE deck_id = $1 ORDER BY slide_order', [id])
-    const currentSlides = slidesResult.rows.map(s => ({
-      title: s.title,
-      content: s.content,
-      order: s.slide_order
-    }))
 
     // 3. Call AI to modify
     const fullDeckContext = {
+      lesson: currentDeck.lesson,
       title: currentDeck.title,
-      slides: currentSlides
+      slides: currentDeck.slides,
+      meta: currentDeck.meta,
+      structure: currentDeck.structure,
     }
 
     let aiResponse
     try {
-      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/modify-deck`, {
+      aiResponse = await axios.post(`${AI_SERVICE_URL}/api/deck/modify-deck`, {
         currentDeck: fullDeckContext,
         feedback,
         subject: currentDeck.subject,
@@ -261,29 +559,23 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
       )
     }
 
-    const { title: newTitle, slides: newSlides } = aiResponse.data
+    const updatedLesson = normalizeLessonDeck(aiResponse.data, {
+      ...currentDeck.lesson,
+      subject: currentDeck.subject,
+      gradeLevel: currentDeck.grade_level,
+      topic: currentDeck.lesson.meta.topic,
+      title: aiResponse.data?.title || currentDeck.title,
+      theme: currentDeck.lesson.meta.theme,
+    })
+    const newTitle = aiResponse.data?.title || updatedLesson.meta.topic || currentDeck.title
 
-    // 4. Overwrite in DB
-    // Update Title
-    await query('UPDATE decks SET title = $1, updated_at = NOW() WHERE id = $2', [newTitle, id])
+    const updatedDeck = await updateStructuredDeck({
+      deckId: id,
+      title: newTitle,
+      lesson: updatedLesson,
+    })
 
-    // Delete old slides
-    await query('DELETE FROM slides WHERE deck_id = $1', [id])
-
-    // Insert new slides (basic columns only - visual metadata columns may not exist in DB)
-    for (const slide of newSlides) {
-      await query(
-        `INSERT INTO slides (deck_id, title, content, slide_order) VALUES ($1, $2, $3, $4)`,
-        [
-          id,
-          slide.title,
-          slide.content,
-          slide.order
-        ]
-      )
-    }
-
-    res.json({ message: 'Deck updated with AI successfully' })
+    res.json(buildCanonicalDeckResponse(updatedDeck, updatedLesson))
 
   } catch (error) {
     next(error)
@@ -293,8 +585,23 @@ export const updateDeckWithAI = async (req: AuthRequest, res: Response, next: Ne
 export const deleteDeck = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params
+    const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    await query('DELETE FROM decks WHERE id = $1 AND school_id = $2', [id, schoolId])
+
+    const deleteResult = schoolId
+      ? await query(
+        'DELETE FROM decks WHERE id = $1 AND created_by = $2 AND school_id = $3 RETURNING id',
+        [id, userId, schoolId]
+      )
+      : await query(
+        'DELETE FROM decks WHERE id = $1 AND created_by = $2 AND school_id IS NULL RETURNING id',
+        [id, userId]
+      )
+
+    if (deleteResult.rowCount === 0) {
+      throw new AppError('Deck not found', 404, 'DECK_NOT_FOUND')
+    }
+
     res.json({ message: 'Deck deleted successfully' })
   } catch (error) {
     next(error)
@@ -434,8 +741,23 @@ export const updateActivity = async (req: AuthRequest, res: Response, next: Next
 export const deleteActivity = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params
+    const userId = req.user!.id
     const schoolId = req.user!.school_id || null
-    await query('DELETE FROM activities WHERE id = $1 AND school_id = $2', [id, schoolId])
+
+    const deleteResult = schoolId
+      ? await query(
+        'DELETE FROM activities WHERE id = $1 AND created_by = $2 AND school_id = $3 RETURNING id',
+        [id, userId, schoolId]
+      )
+      : await query(
+        'DELETE FROM activities WHERE id = $1 AND created_by = $2 AND school_id IS NULL RETURNING id',
+        [id, userId]
+      )
+
+    if (deleteResult.rowCount === 0) {
+      throw new AppError('Activity not found', 404, 'ACTIVITY_NOT_FOUND')
+    }
+
     res.json({ message: 'Activity deleted successfully' })
   } catch (error) {
     next(error)
@@ -644,13 +966,23 @@ export const getLessonPlanById = async (req: AuthRequest, res: Response, next: N
 export const deleteLessonPlan = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params
+    const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
-    const deleteQuery = schoolId
-      ? 'DELETE FROM lesson_plans WHERE id = $1 AND school_id = $2'
-      : 'DELETE FROM lesson_plans WHERE id = $1 AND school_id IS NULL'
+    const deleteResult = schoolId
+      ? await query(
+        'DELETE FROM lesson_plans WHERE id = $1 AND created_by = $2 AND school_id = $3 RETURNING id',
+        [id, userId, schoolId]
+      )
+      : await query(
+        'DELETE FROM lesson_plans WHERE id = $1 AND created_by = $2 AND school_id IS NULL RETURNING id',
+        [id, userId]
+      )
 
-    await query(deleteQuery, schoolId ? [id, schoolId] : [id])
+    if (deleteResult.rowCount === 0) {
+      throw new AppError('Lesson plan not found', 404, 'LESSON_PLAN_NOT_FOUND')
+    }
+
     res.json({ message: 'Lesson plan deleted successfully' })
   } catch (error) {
     next(error)
@@ -1066,4 +1398,3 @@ export const deleteTopic = async (req: AuthRequest, res: Response, next: NextFun
     next(error)
   }
 }
-

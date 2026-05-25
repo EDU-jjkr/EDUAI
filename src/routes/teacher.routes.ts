@@ -33,6 +33,25 @@ router.post(
 router.get('/decks', teacherController.getDecks)
 router.get('/deck/:id', teacherController.getDeckById)
 router.put('/deck/:id', teacherController.updateDeck)
+router.post(
+  '/decks/regenerate-cluster',
+  [
+    body('deckId').trim().notEmpty().withMessage('deckId is required'),
+    body('clusterId').trim().notEmpty().withMessage('clusterId is required'),
+    body('pedagogicalRole').optional().isString().trim(),
+    body('theme').optional().isString().trim(),
+  ],
+  teacherController.regenerateDeckCluster
+)
+router.patch(
+  '/decks/switch-layout',
+  [
+    body('deckId').trim().notEmpty().withMessage('deckId is required'),
+    body('slideId').trim().notEmpty().withMessage('slideId is required'),
+    body('layoutId').trim().notEmpty().withMessage('layoutId is required'),
+  ],
+  teacherController.switchDeckSlideLayout
+)
 router.delete('/deck/:id', teacherController.deleteDeck)
 
 // Activity Generation
