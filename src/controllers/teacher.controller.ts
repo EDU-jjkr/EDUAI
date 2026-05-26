@@ -141,7 +141,19 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topics, topic, subject, gradeLevel, chapter, level, theme, additionalInstructions, forceRegenerate = false } = req.body
+    const {
+      topics,
+      topic,
+      subject,
+      gradeLevel,
+      chapter,
+      level,
+      theme,
+      additionalInstructions,
+      aiProvider,
+      aiModel,
+      forceRegenerate = false
+    } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
     const resolvedTheme = resolveDeckTheme(theme, subject)
@@ -166,7 +178,7 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
 
     // 1. Check for existing deck (Smart Caching) - match by source_chapter
     // Skip caching for differentiated levels (SUPPORT, EXTENSION) - only cache CORE
-    const shouldUseCache = !forceRegenerate && chapter && (!level || level === 'CORE')
+    const shouldUseCache = !forceRegenerate && !aiProvider && !aiModel && chapter && (!level || level === 'CORE')
 
     if (shouldUseCache) {
       const existingDeck = await query(
@@ -194,6 +206,16 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
     // Call AI service with structured prompt for topics
     let aiResponse
     try {
+      console.info('[teacher.generateDeck] Forwarding AI request', {
+        topics: topicsArray,
+        subject,
+        gradeLevel,
+        chapter,
+        level: level || 'CORE',
+        aiProvider: aiProvider || 'default',
+        aiModel: aiModel || 'default',
+      })
+
       aiResponse = await axios.post(`${AI_SERVICE_URL}/api/deck/generate-complete`, {
         topics: topicsArray,
         subject,
@@ -203,6 +225,8 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
         level: level || 'CORE', // Pass differentiation level (SUPPORT, CORE, EXTENSION)
         theme: resolvedTheme,
         additionalInstructions,
+        aiProvider,
+        aiModel,
         structuredFormat: true, // Signal to use new structured format
       }, {
         timeout: AI_SERVICE_TIMEOUT
@@ -216,8 +240,11 @@ export const generateDeck = async (req: AuthRequest, res: Response, next: NextFu
       )
     }
 
-    // Debug: Log the full response to see what we're getting
-    console.log('AI Response received:', JSON.stringify(aiResponse.data, null, 2))
+    console.info('[teacher.generateDeck] AI response received', {
+      title: aiResponse.data?.title,
+      slideCount: Array.isArray(aiResponse.data?.slides) ? aiResponse.data.slides.length : undefined,
+      responseMetaKeys: aiResponse.data?.meta ? Object.keys(aiResponse.data.meta) : [],
+    })
 
     const lesson = normalizeLessonDeck(aiResponse.data, {
       subject,
@@ -332,7 +359,7 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { deckId, clusterId, pedagogicalRole, theme } = req.body
+    const { deckId, clusterId, pedagogicalRole } = req.body
     const schoolId = req.user!.school_id || null
     const currentDeck = await fetchDeckWithSlides(String(deckId), schoolId)
 
@@ -373,7 +400,6 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
         deckId: String(deckId),
         clusterId: String(clusterId),
         pedagogicalRole: requestedRole,
-        theme: theme || currentDeck.lesson.meta.theme,
         currentDeck: fullDeckContext,
         subject: currentDeck.subject,
         gradeLevel: currentDeck.grade_level,
@@ -393,7 +419,7 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
       gradeLevel: currentDeck.grade_level,
       topic: currentDeck.lesson.meta.topic,
       title: currentDeck.title,
-      theme: resolveDeckTheme(theme || currentDeck.lesson.meta.theme, currentDeck.subject),
+      theme: resolveDeckTheme(currentDeck.lesson.meta.theme, currentDeck.subject),
     })
 
     const normalizedClusterSlides = normalizedLesson.slides.filter((slide) => slide.clusterId === clusterId)
@@ -615,7 +641,7 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { classLevel, subject, chapter, topic, count = 5 } = req.body
+    const { classLevel, subject, chapter, topic, count = 5, aiProvider, aiModel } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
@@ -635,7 +661,9 @@ export const generateActivity = async (req: AuthRequest, res: Response, next: Ne
         subject,
         chapter,
         topic,
-        count
+        count,
+        aiProvider,
+        aiModel
       }, {
         timeout: AI_SERVICE_TIMEOUT
       })
@@ -771,12 +799,12 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topics, subject, gradeLevel, classDuration = 45, forceRegenerate = false } = req.body
+    const { topics, subject, gradeLevel, classDuration = 45, aiProvider, aiModel, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
     // Smart Caching: Check for existing lesson plan with matching source_topics and classDuration
-    if (!forceRegenerate) {
+    if (!forceRegenerate && !aiProvider && !aiModel) {
       const topicsArray = Array.isArray(topics) ? topics : [topics]
       const existingPlan = await query(
         'SELECT * FROM lesson_plans WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_topics = $4 ORDER BY created_at DESC LIMIT 1',
@@ -806,6 +834,8 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
         subject,
         gradeLevel,
         classDuration,
+        aiProvider,
+        aiModel,
       }, {
         timeout: AI_SERVICE_TIMEOUT
       })
@@ -1167,7 +1197,7 @@ export const generateTopic = async (req: AuthRequest, res: Response, next: NextF
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { topic, subject, gradeLevel, classDuration = 40, forceRegenerate = false } = req.body
+    const { topic, subject, gradeLevel, classDuration = 40, aiProvider, aiModel, forceRegenerate = false } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
@@ -1175,7 +1205,7 @@ export const generateTopic = async (req: AuthRequest, res: Response, next: NextF
     const numSlides = Math.max(5, Math.min(20, Math.ceil(classDuration / 4)))
 
     // 1. Check for existing topic (Smart Caching) - match by source_topic
-    if (!forceRegenerate) {
+    if (!forceRegenerate && !aiProvider && !aiModel) {
       const existingTopic = await query(
         'SELECT * FROM topics WHERE created_by = $1 AND subject = $2 AND grade_level = $3 AND source_topic = $4 ORDER BY created_at DESC LIMIT 1',
         [userId, subject, gradeLevel, topic]
@@ -1199,6 +1229,8 @@ export const generateTopic = async (req: AuthRequest, res: Response, next: NextF
       gradeLevel,
       numSlides,
       classDuration,
+      aiProvider,
+      aiModel,
     })
 
     const { title, slides } = aiResponse.data

@@ -25,7 +25,7 @@ export const submitTextDoubt = async (req: AuthRequest, res: Response, next: Nex
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { question, subject } = req.body
+    const { question, subject, aiProvider, aiModel } = req.body
     const studentId = req.user!.id
     const schoolId = req.user!.school_id || null
     const studentGrade = req.user!.grade_level || null
@@ -35,6 +35,8 @@ export const submitTextDoubt = async (req: AuthRequest, res: Response, next: Nex
       question,
       subject,
       gradeLevel: studentGrade,
+      aiProvider,
+      aiModel,
     })
 
     const { solution, relatedConcepts, similarProblems } = aiResponse.data
@@ -201,7 +203,7 @@ export const submitFollowUp = async (req: AuthRequest, res: Response, next: Next
     }
 
     const { id } = req.params
-    const { question } = req.body
+    const { question, aiProvider, aiModel } = req.body
     const studentId = req.user!.id
 
     const doubtResult = await query(
@@ -219,6 +221,8 @@ export const submitFollowUp = async (req: AuthRequest, res: Response, next: Next
       originalQuestion: originalDoubt.question,
       followUpQuestion: question,
       previousContext: originalDoubt.solution,
+      aiProvider,
+      aiModel,
     })
 
     const { answer } = aiResponse.data

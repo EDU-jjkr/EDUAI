@@ -31,7 +31,12 @@ router.use(authorize('student', 'admin'))
 // Doubt Solver - Text Input (no school required - it's a personal feature)
 router.post(
   '/doubt/text',
-  [body('question').trim().notEmpty(), body('subject').optional().trim()],
+  [
+    body('question').trim().notEmpty(),
+    body('subject').optional().trim(),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']),
+    body('aiModel').optional().isString().trim(),
+  ],
   studentController.submitTextDoubt
 )
 
@@ -58,7 +63,11 @@ router.get('/doubt/:id', studentController.getDoubtById)
 // Submit follow-up question (no school required)
 router.post(
   '/doubt/:id/follow-up',
-  [body('question').trim().notEmpty()],
+  [
+    body('question').trim().notEmpty(),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']),
+    body('aiModel').optional().isString().trim(),
+  ],
   studentController.submitFollowUp
 )
 

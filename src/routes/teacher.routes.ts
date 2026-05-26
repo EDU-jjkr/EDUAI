@@ -19,6 +19,8 @@ router.post(
     body('subject').trim().notEmpty().withMessage('Subject is required'),
     body('gradeLevel').trim().notEmpty().withMessage('Grade level is required'),
     body('chapter').optional().trim(),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']).withMessage('aiProvider must be openai or agentrouter'),
+    body('aiModel').optional().isString().trim(),
     // Custom validation to ensure at least one of topics or topic exists
     body().custom((value, { req }) => {
       if (!req.body.topics && !req.body.topic) {
@@ -39,7 +41,6 @@ router.post(
     body('deckId').trim().notEmpty().withMessage('deckId is required'),
     body('clusterId').trim().notEmpty().withMessage('clusterId is required'),
     body('pedagogicalRole').optional().isString().trim(),
-    body('theme').optional().isString().trim(),
   ],
   teacherController.regenerateDeckCluster
 )
@@ -62,6 +63,8 @@ router.post(
     body('subject').trim().notEmpty(),
     body('chapter').trim().notEmpty(),
     body('topic').trim().notEmpty(),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']),
+    body('aiModel').optional().isString().trim(),
   ],
   teacherController.generateActivity
 )
@@ -79,6 +82,8 @@ router.post(
     body('subject').trim().notEmpty(),
     body('gradeLevel').trim().notEmpty(),
     body('classDuration').optional().isInt({ min: 15, max: 120 }).withMessage('Class duration must be between 15 and 120 minutes'),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']),
+    body('aiModel').optional().isString().trim(),
   ],
   teacherController.generateLessonPlan
 )
@@ -119,6 +124,8 @@ router.post(
     body('subject').trim().notEmpty(),
     body('gradeLevel').trim().notEmpty(),
     body('numSlides').optional().isInt({ min: 5, max: 20 }),
+    body('aiProvider').optional().isIn(['openai', 'agentrouter']),
+    body('aiModel').optional().isString().trim(),
   ],
   teacherController.generateTopic
 )
