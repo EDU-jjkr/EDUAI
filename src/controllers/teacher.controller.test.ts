@@ -69,7 +69,6 @@ describe('teacher.controller regenerateDeckCluster', () => {
         deckId: 'deck_1',
         clusterId: 'explain_1',
         pedagogicalRole: 'explain_deepen',
-        theme: 'blueprint',
       },
       user: {
         id: 'teacher_1',
@@ -169,7 +168,6 @@ describe('teacher.controller regenerateDeckCluster', () => {
         }),
         subject: 'Physics',
         gradeLevel: '9',
-        theme: 'blueprint',
       })
     )
     expect(mockedNormalizeLessonDeck).toHaveBeenCalledWith(
@@ -197,7 +195,6 @@ describe('teacher.controller regenerateDeckCluster', () => {
         deckId: 'deck_1',
         clusterId: 'explain_1',
         pedagogicalRole: 'explain_deepen',
-        theme: 'blueprint',
       },
       user: {
         id: 'teacher_1',
@@ -265,7 +262,6 @@ describe('teacher.controller regenerateDeckCluster', () => {
         deckId: 'deck_1',
         clusterId: 'explain_1',
         pedagogicalRole: 'explain_deepen',
-        theme: 'blueprint',
       },
       user: {
         id: 'teacher_1',

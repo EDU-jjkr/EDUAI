@@ -5,13 +5,15 @@ import {
     getSubjectsByClass,
     getChaptersBySubject,
     getTopicsByChapter,
+    getCurriculumsByBoard,
     CURRICULUM_DATA
 } from '../services/curriculum'
 import { AppError } from '../middleware/error-handler'
 
 export const getClasses = (req: Request, res: Response, next: NextFunction) => {
     try {
-        const classes = getAllClasses()
+        const board = req.query.board as string | undefined
+        const classes = getAllClasses(board)
         res.json(classes)
     } catch (error) {
         next(error)
@@ -25,7 +27,8 @@ export const getSubjects = (req: Request, res: Response, next: NextFunction) => 
             throw new AppError('Invalid class number', 400, 'INVALID_INPUT')
         }
 
-        const subjects = getSubjectsByClass(classNum)
+        const board = req.query.board as string | undefined
+        const subjects = getSubjectsByClass(classNum, board)
         res.json(subjects)
     } catch (error) {
         next(error)
@@ -41,7 +44,8 @@ export const getChapters = (req: Request, res: Response, next: NextFunction) => 
             throw new AppError('Invalid class number', 400, 'INVALID_INPUT')
         }
 
-        const chapters = getChaptersBySubject(classNum, subject)
+        const board = req.query.board as string | undefined
+        const chapters = getChaptersBySubject(classNum, subject, board)
         res.json(chapters)
     } catch (error) {
         next(error)
@@ -57,7 +61,8 @@ export const getTopics = (req: Request, res: Response, next: NextFunction) => {
             throw new AppError('Invalid class number', 400, 'INVALID_INPUT')
         }
 
-        const topics = getTopicsByChapter(classNum, subject, chapter)
+        const board = req.query.board as string | undefined
+        const topics = getTopicsByChapter(classNum, subject, chapter, board)
         res.json(topics)
     } catch (error) {
         next(error)
@@ -66,7 +71,9 @@ export const getTopics = (req: Request, res: Response, next: NextFunction) => {
 
 export const getFullCurriculum = (req: Request, res: Response, next: NextFunction) => {
     try {
-        res.json(CURRICULUM_DATA)
+        const board = req.query.board as string | undefined
+        const data = board ? getCurriculumsByBoard(board) : CURRICULUM_DATA
+        res.json(data)
     } catch (error) {
         next(error)
     }

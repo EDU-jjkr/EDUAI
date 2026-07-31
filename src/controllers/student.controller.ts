@@ -8,7 +8,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { logEvent } from '../services/analytics.service'
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const AI_SERVICE_TIMEOUT = parseInt(process.env.AI_SERVICE_TIMEOUT || '15000', 10)
 
 // Create centralized axios client - DO NOT HARDCODE localhost!
@@ -31,7 +31,7 @@ export const submitTextDoubt = async (req: AuthRequest, res: Response, next: Nex
     const studentGrade = req.user!.grade_level || null
 
     // Call AI service to solve doubt (include grade for age-appropriate answer)
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/solve-doubt/text`, {
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/doubt-solver/solve-doubt/text`, {
       question,
       subject,
       gradeLevel: studentGrade,
@@ -215,7 +215,7 @@ export const submitFollowUp = async (req: AuthRequest, res: Response, next: Next
 
     const originalDoubt = doubtResult.rows[0]
 
-    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/doubt/follow-up`, {
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/api/doubt-solver/doubt/follow-up`, {
       originalQuestion: originalDoubt.question,
       followUpQuestion: question,
       previousContext: originalDoubt.solution,

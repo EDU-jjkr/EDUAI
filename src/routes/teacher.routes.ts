@@ -39,7 +39,6 @@ router.post(
     body('deckId').trim().notEmpty().withMessage('deckId is required'),
     body('clusterId').trim().notEmpty().withMessage('clusterId is required'),
     body('pedagogicalRole').optional().isString().trim(),
-    body('theme').optional().isString().trim(),
   ],
   teacherController.regenerateDeckCluster
 )

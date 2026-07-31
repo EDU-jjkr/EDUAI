@@ -332,7 +332,7 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { deckId, clusterId, pedagogicalRole, theme } = req.body
+    const { deckId, clusterId, pedagogicalRole } = req.body
     const schoolId = req.user!.school_id || null
     const currentDeck = await fetchDeckWithSlides(String(deckId), schoolId)
 
@@ -373,7 +373,6 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
         deckId: String(deckId),
         clusterId: String(clusterId),
         pedagogicalRole: requestedRole,
-        theme: theme || currentDeck.lesson.meta.theme,
         currentDeck: fullDeckContext,
         subject: currentDeck.subject,
         gradeLevel: currentDeck.grade_level,
@@ -393,7 +392,7 @@ export const regenerateDeckCluster = async (req: AuthRequest, res: Response, nex
       gradeLevel: currentDeck.grade_level,
       topic: currentDeck.lesson.meta.topic,
       title: currentDeck.title,
-      theme: resolveDeckTheme(theme || currentDeck.lesson.meta.theme, currentDeck.subject),
+      theme: resolveDeckTheme(currentDeck.lesson.meta.theme, currentDeck.subject),
     })
 
     const normalizedClusterSlides = normalizedLesson.slides.filter((slide) => slide.clusterId === clusterId)
@@ -800,9 +799,21 @@ export const generateLessonPlan = async (req: AuthRequest, res: Response, next: 
 
     let aiResponse
     try {
+      const formattedTopics = (Array.isArray(topics) ? topics : [topics]).map((t: any) => {
+        if (typeof t === 'string') {
+          return { name: t, periodsRequired: 1, learningObjectives: [], keyConcepts: [] }
+        }
+        return {
+          name: t.name || t.title || 'Topic',
+          periodsRequired: t.periodsRequired || 1,
+          learningObjectives: t.learningObjectives || [],
+          keyConcepts: t.keyConcepts || t.keyPoints || []
+        }
+      })
+
       // AI will determine number of sessions based on topic count
       aiResponse = await axios.post(`${AI_SERVICE_URL}/api/lesson-plan/generate-lesson-plan`, {
-        topics,
+        topics: formattedTopics,
         subject,
         gradeLevel,
         classDuration,
@@ -873,21 +884,22 @@ export const generateCurriculumPlan = async (req: AuthRequest, res: Response, ne
       return res.status(400).json({ errors: errors.array() })
     }
 
-    const { gradeLevel, subject, chapter } = req.body
+    const { gradeLevel, subject, chapter, board } = req.body
     const userId = req.user!.id
     const schoolId = req.user!.school_id || null
 
     // Import curriculum helper (inline to avoid circular deps)
     const { getChaptersBySubject } = await import('../services/curriculum')
 
-    // Fetch curriculum data for this class/subject
-    const allChapters = getChaptersBySubject(parseInt(gradeLevel), subject)
+    // Fetch curriculum data for this class/subject (board-aware)
+    const allChapters = getChaptersBySubject(parseInt(gradeLevel), subject, board)
 
     if (!allChapters || allChapters.length === 0) {
       return res.status(404).json({
-        message: `No curriculum found for Class ${gradeLevel} ${subject}`
+        message: `No curriculum found for Class ${gradeLevel} ${subject}${board ? ` (${board})` : ''}`
       })
     }
+
 
     // If chapter is specified, filter to just that chapter
     let chaptersToSend = allChapters

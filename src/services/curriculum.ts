@@ -1,14 +1,26 @@
 /**
- * ICSE/ISC Curriculum Standards
- * Based on official CISCE (Council for the Indian School Certificate Examinations) syllabus 2024-2025
+ * ICSE/ISC/CBSE Curriculum Standards
+ * ICSE/ISC: Based on official CISCE (Council for the Indian School Certificate Examinations) syllabus 2024-2025
+ * CBSE: Based on official NCERT/CBSE syllabus 2024-2025
  */
 
+import {
+    class8CurriculumCBSE,
+    class9CurriculumCBSE,
+    class10CurriculumCBSE,
+    class11CurriculumCBSE,
+    class12CurriculumCBSE,
+} from './curriculum-cbse'
+
 // Type Definitions
-export type Board = 'ICSE' | 'ISC';
+export type Board = 'ICSE' | 'ISC' | 'CBSE';
 
 export interface Topic {
     name: string;
     subtopics?: string[];
+    periodsRequired?: number;
+    learningObjectives?: string[];
+    keyConcepts?: string[];
 }
 
 export interface Chapter {
@@ -1254,8 +1266,8 @@ const class12Curriculum: ClassCurriculum = {
     ]
 };
 
-// All Curricula
-export const CURRICULUM_DATA: ClassCurriculum[] = [
+// ── ICSE/ISC dataset ────────────────────────────────────────────────────────
+export const ICSE_CURRICULUM_DATA: ClassCurriculum[] = [
     class8Curriculum,
     class9Curriculum,
     class10Curriculum,
@@ -1263,33 +1275,64 @@ export const CURRICULUM_DATA: ClassCurriculum[] = [
     class12Curriculum,
 ];
 
-// Helper Functions
-export const getCurriculumByClass = (classNum: number): ClassCurriculum | undefined => {
-    return CURRICULUM_DATA.find(c => c.classNumber === classNum);
+// ── CBSE dataset ─────────────────────────────────────────────────────────────
+export const CBSE_CURRICULUM_DATA: ClassCurriculum[] = [
+    class8CurriculumCBSE,
+    class9CurriculumCBSE,
+    class10CurriculumCBSE,
+    class11CurriculumCBSE,
+    class12CurriculumCBSE,
+];
+
+// ── Combined (backward-compatible) ──────────────────────────────────────────
+export const CURRICULUM_DATA: ClassCurriculum[] = [
+    ...ICSE_CURRICULUM_DATA,
+    ...CBSE_CURRICULUM_DATA,
+];
+
+// ── Internal resolver ────────────────────────────────────────────────────────
+const resolveDataset = (board?: string): ClassCurriculum[] => {
+    if (!board) return ICSE_CURRICULUM_DATA;
+    const upper = board.toUpperCase();
+    if (upper === 'CBSE') return CBSE_CURRICULUM_DATA;
+    return ICSE_CURRICULUM_DATA; // 'ICSE' | 'ISC' both map to ICSE dataset
 };
 
-export const getSubjectsByClass = (classNum: number): string[] => {
-    const curriculum = getCurriculumByClass(classNum);
+// ── Helper Functions ─────────────────────────────────────────────────────────
+export const getCurriculumByClass = (classNum: number, board?: string): ClassCurriculum | undefined => {
+    return resolveDataset(board).find(c => c.classNumber === classNum);
+};
+
+export const getSubjectsByClass = (classNum: number, board?: string): string[] => {
+    const curriculum = getCurriculumByClass(classNum, board);
     return curriculum ? curriculum.subjects.map(s => s.name) : [];
 };
 
-export const getChaptersBySubject = (classNum: number, subjectName: string): Chapter[] => {
-    const curriculum = getCurriculumByClass(classNum);
+export const getChaptersBySubject = (classNum: number, subjectName: string, board?: string): Chapter[] => {
+    const curriculum = getCurriculumByClass(classNum, board);
     const subject = curriculum?.subjects.find(s => s.name.toLowerCase() === subjectName.toLowerCase());
     return subject?.chapters || [];
 };
 
-export const getTopicsByChapter = (classNum: number, subjectName: string, chapterName: string): Topic[] => {
-    const chapters = getChaptersBySubject(classNum, subjectName);
+export const getTopicsByChapter = (classNum: number, subjectName: string, chapterName: string, board?: string): Topic[] => {
+    const chapters = getChaptersBySubject(classNum, subjectName, board);
     const chapter = chapters.find(c => c.name.toLowerCase() === chapterName.toLowerCase());
     return chapter?.topics || [];
 };
 
-export const searchCurriculum = (query: string): Array<{ classNum: number; subject: string; chapter: string; topic: string }> => {
+export const getAllClasses = (board?: string): number[] => {
+    const dataset = resolveDataset(board);
+    return [...new Set(dataset.map(c => c.classNumber))].sort((a, b) => a - b);
+};
+
+export const getCurriculumsByBoard = (board: string): ClassCurriculum[] => resolveDataset(board);
+
+export const searchCurriculum = (query: string, board?: string): Array<{ classNum: number; subject: string; chapter: string; topic: string }> => {
     const results: Array<{ classNum: number; subject: string; chapter: string; topic: string }> = [];
     const lowerQuery = query.toLowerCase();
+    const dataset = resolveDataset(board);
 
-    for (const curriculum of CURRICULUM_DATA) {
+    for (const curriculum of dataset) {
         for (const subject of curriculum.subjects) {
             for (const chapter of subject.chapters) {
                 for (const topic of chapter.topics) {
@@ -1313,9 +1356,7 @@ export const searchCurriculum = (query: string): Array<{ classNum: number; subje
     return results;
 };
 
-export const getAllClasses = (): number[] => CURRICULUM_DATA.map(c => c.classNumber);
-
-export const getBoardByClass = (classNum: number): Board | undefined => {
-    const curriculum = getCurriculumByClass(classNum);
+export const getBoardByClass = (classNum: number, board?: string): Board | undefined => {
+    const curriculum = getCurriculumByClass(classNum, board);
     return curriculum?.board;
 };
