@@ -58,7 +58,9 @@ export const generateQuestions = async (req: AuthRequest, res: Response, next: N
             classLevel,
             extraCommands,
             title,
-            provider
+            provider,
+            enableVisuals,
+            visualStyle
         } = req.body
 
         // Validate required fields
@@ -78,7 +80,9 @@ export const generateQuestions = async (req: AuthRequest, res: Response, next: N
                 classLevel,
                 extraCommands,
                 title,
-                provider: provider || 'gemini'
+                provider: provider || 'openai',
+                enableVisuals,
+                visualStyle
             },
             {
                 timeout: 480000 // 120 second timeout for AI generation
@@ -99,10 +103,13 @@ export const generateMixedQuestions = async (req: AuthRequest, res: Response, ne
             chapter,
             difficulty,
             classLevel,
+            concepts,
             extraCommands,
             title,
             provider,
-            questionTypes
+            questionTypes,
+            enableVisuals,
+            visualStyle
         } = req.body
 
         // Validate required fields
@@ -118,10 +125,13 @@ export const generateMixedQuestions = async (req: AuthRequest, res: Response, ne
                 chapter,
                 difficulty,
                 classLevel,
+                concepts,
                 extraCommands,
                 title,
-                provider: provider || 'gemini',
-                questionTypes
+                provider: provider || 'openai',
+                questionTypes,
+                enableVisuals,
+                visualStyle
             },
             {
                 timeout: 480000 // 480 second timeout for AI generation
@@ -142,12 +152,15 @@ export const generateMixedQuestionsPDF = async (req: AuthRequest, res: Response,
             chapter,
             difficulty,
             classLevel,
+            concepts,
             extraCommands,
             customTitle,
             provider,
             questionTypes,
             includeAnswers,
-            includeExplanations
+            includeExplanations,
+            enableVisuals,
+            visualStyle
         } = req.body
 
         // Forward request to question generator service
@@ -158,12 +171,15 @@ export const generateMixedQuestionsPDF = async (req: AuthRequest, res: Response,
                 chapter,
                 difficulty,
                 classLevel,
+                concepts,
                 extraCommands,
                 customTitle,
-                provider: provider || 'gemini',
+                provider: provider || 'openai',
                 questionTypes,
                 includeAnswers,
-                includeExplanations
+                includeExplanations,
+                enableVisuals,
+                visualStyle
             },
             {
                 responseType: 'arraybuffer',
@@ -188,10 +204,13 @@ export const generateMixedAnswerKey = async (req: AuthRequest, res: Response, ne
             chapter,
             difficulty,
             classLevel,
+            concepts,
             extraCommands,
             customTitle,
             provider,
-            questionTypes
+            questionTypes,
+            enableVisuals,
+            visualStyle
         } = req.body
 
         // Forward request to question generator service
@@ -202,10 +221,13 @@ export const generateMixedAnswerKey = async (req: AuthRequest, res: Response, ne
                 chapter,
                 difficulty,
                 classLevel,
+                concepts,
                 extraCommands,
                 customTitle,
-                provider: provider || 'gemini',
-                questionTypes
+                provider: provider || 'openai',
+                questionTypes,
+                enableVisuals,
+                visualStyle
             },
             {
                 responseType: 'arraybuffer',

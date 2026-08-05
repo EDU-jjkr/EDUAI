@@ -26,6 +26,7 @@ import resultsRoutes from './routes/results.routes'
 import materialsRoutes from './routes/materials.routes'
 import announcementsRoutes from './routes/announcements.routes'
 import questionRoutes from './routes/question.routes'
+import superAdminRoutes from './routes/super-admin.routes'
 import { checkAiHealth } from './services/ai.service'
 
 const app: Application = express()
@@ -82,6 +83,8 @@ app.use('/api', resultsRoutes)   // Results/exams routes (teacher/student)
 app.use('/api', materialsRoutes) // Study materials routes (teacher/student)
 app.use('/api', announcementsRoutes) // Announcements and notifications
 app.use('/api/questions', questionRoutes) // Question generator (teacher/admin)
+app.use('/api/super-admin', superAdminRoutes) // Super-admin: tenant management & platform stats
+app.use('/api/public/schools', superAdminRoutes) // Public: school registration & lookup by subdomain
 
 // Internal AI health check
 app.get('/internal/ai-health', async (req, res) => {
@@ -107,3 +110,6 @@ app.listen(PORT, '0.0.0.0', () => {
 })
 
 export default app
+
+// Trigger reload
+// Second trigger

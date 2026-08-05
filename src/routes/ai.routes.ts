@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { aiGenerate, checkAiHealth } from '../services/ai.service'
+import { aiGenerate, aiGenerateBinary, checkAiHealth } from '../services/ai.service'
 import { authenticate } from '../middleware/auth'
 import axios from 'axios'
 
@@ -16,6 +16,28 @@ router.post('/generate', authenticate, async (req, res) => {
             error: err.message || 'AI temporarily unavailable'
         })
     }
+})
+
+router.post('/pptx', authenticate, async (req, res) => {
+    const result = await aiGenerateBinary({
+        route: '/api/deck/generate-deck-pptx',
+        payload: req.body,
+    })
+
+    if (!result.success || !result.data) {
+        return res.status(503).json({
+            error: result.message || 'AI temporarily unavailable'
+        })
+    }
+
+    res.setHeader(
+        'Content-Type',
+        result.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    )
+    if (result.headers?.['content-disposition']) {
+        res.setHeader('Content-Disposition', result.headers['content-disposition'])
+    }
+    res.send(result.data)
 })
 
 // Public health check for AI service availability
